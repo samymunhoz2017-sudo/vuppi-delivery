@@ -28,3 +28,13 @@ release/
 work/
 work_*
 *.zip
+.openai/
+verification/
+make_v*_zip.py
+RELEASE-V0.*.md
+ACESSO-TITULAR-CONCLUIDO.md
+ATUALIZACAO-VISUAL-V07.md
+ENTREGAS-V08.md
+ENTREGAS-V09.md
+FASE-2-UP-CARROS.md
+INICIAR-UP.cmd
