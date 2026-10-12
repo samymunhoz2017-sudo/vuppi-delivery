@@ -4,9 +4,11 @@ Plataforma de entregas locais com painel administrativo, área do estabeleciment
 
 ## Versão atual
 
-`0.56.0`
+`0.63.1`
 
-Esta versão estabiliza o recebimento de ofertas no Android, elimina alertas duplicados, adiciona recusa persistida no servidor, protege o aceite contra concorrência e melhora a apresentação da oferta com confirmação por arraste.
+Esta versão consolida a estabilização do recebimento de ofertas no Android e atualiza a plataforma web com um novo centro de comando administrativo, Vuppi Wallet baseada no ledger real, entrega rápida sem recarregar a sessão, gestão de consumidores do estabelecimento e Google Maps validado no ambiente publicado.
+
+Produção: [vuppidelivery.com.br](https://vuppidelivery.com.br)
 
 ## Estrutura
 
@@ -23,4 +25,4 @@ Chaves de assinatura, credenciais, arquivos `.env` e configurações locais não
 
 ## Publicação
 
-Consulte `RELEASE-V0.56.md` e `HOSPEDAGEM-HOSTINGER.md`.
+Consulte `docs/admin-panel-gap-analysis.md` e `HOSPEDAGEM-HOSTINGER.md`.
