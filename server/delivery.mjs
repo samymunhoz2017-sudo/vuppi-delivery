@@ -1,0 +1,123 @@
+// Rotas públicas de baixo volume. Somente o servidor calcula e grava cotações.
+let nextRoute=0;
+export async function handleDelivery(request,c){
+ const {s,user}=await c.session(),path=new URL(request.url).pathname;
+ const rpc=async(action,data={})=>c.upstream('/rest/v1/rpc/vuppi_delivery',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});
+ const reply=async data=>{await c.renewCookie();return c.json(data)};
+ const geocode=async address=>{
+  const query=String(address||'').trim();if(query.length<5||!/(?:^|\D)\d{1,6}(?:\D|$)/.test(query))throw Error('Informe um endereço completo, com rua e número.');
+  if(!c.env.GOOGLE_MAPS_SERVER_KEY)throw Error('O Google Maps ainda aguarda a chave segura do servidor.');
+  const url='https://maps.googleapis.com/maps/api/geocode/json?region=br&language=pt-BR&address='+encodeURIComponent(query+', Pitangueiras, SP, Brasil')+'&key='+encodeURIComponent(c.env.GOOGLE_MAPS_SERVER_KEY);
+  const response=await c.fetcher(url,{signal:AbortSignal.timeout(10000)}),body=response.ok?await response.json():{},hit=body.results?.[0],lat=Number(hit?.geometry?.location?.lat),lng=Number(hit?.geometry?.location?.lng);
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))throw Error('Não encontramos esse endereço. Confira CEP, rua e número.');
+  const types=hit.types||[];if(!types.some(type=>['street_address','premise','subpremise'].includes(type)))throw Error('Selecione um endereço completo do Google, incluindo o número do imóvel.');return {lat,lng,label:hit.formatted_address||query};
+ };
+ if(path==='/api/delivery/cep'&&request.method==='GET'){
+  const cep=new URL(request.url).searchParams.get('cep')?.replace(/\D/g,'');if(!cep||cep.length!==8)return c.json({message:'Informe um CEP válido com 8 números.'},400);
+  const response=await c.fetcher('https://viacep.com.br/ws/'+cep+'/json/',{headers:{'User-Agent':'VUPPI-Delivery/0.12'},signal:AbortSignal.timeout(8000)});if(!response.ok)return c.json({message:'Não foi possível consultar o CEP.'},503);const address=await response.json();if(address.erro)return c.json({message:'CEP não encontrado.'},404);return reply({cep:address.cep,street:address.logradouro,neighborhood:address.bairro,city:address.localidade,uf:address.uf,address:[address.logradouro,address.bairro,address.localidade+' - '+address.uf].filter(Boolean).join(', ')})
+ }
+ if(path==='/api/delivery/address'&&request.method==='GET'){
+  const query=String(new URL(request.url).searchParams.get('q')||'').trim();if(query.length<3)return c.json({results:[]});
+  if(!c.env.GOOGLE_MAPS_SERVER_KEY)return c.json({message:'A busca Google aguarda a chave segura do servidor.'},503);
+  const url='https://maps.googleapis.com/maps/api/geocode/json?region=br&language=pt-BR&address='+encodeURIComponent(query+', Pitangueiras, SP, Brasil')+'&key='+encodeURIComponent(c.env.GOOGLE_MAPS_SERVER_KEY),response=await c.fetcher(url,{signal:AbortSignal.timeout(10000)});
+  if(!response.ok)return c.json({message:'A busca de endereços está temporariamente indisponível.'},503);
+  const body=await response.json(),rows=body.results||[];return reply({results:rows.slice(0,6).map(x=>({label:x.formatted_address,lat:Number(x.geometry?.location?.lat),lng:Number(x.geometry?.location?.lng)})).filter(x=>x.label&&Number.isFinite(x.lat)&&Number.isFinite(x.lng))});
+ }
+ if(path==='/api/delivery/state'&&request.method==='GET'){
+  const state=await c.upstream('/rest/v1/rpc/vuppi_delivery_state',{method:'POST',token:s.access,body:{},carErrors:true});
+  if(state?.admin&&c.env.SUPABASE_SECRET_KEY){
+   try{
+    const response=await c.fetcher(c.env.SUPABASE_URL+'/auth/v1/admin/users?page=1&per_page=100',{headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY},signal:AbortSignal.timeout(10000)}),body=response.ok?await response.json():{},existing=new Set((state.members||[]).map(x=>x.user_id));
+    for(const account of body.users||[]){const name=String(account.user_metadata?.full_name||'').trim();if(!name||existing.has(account.id))continue;(state.members??=[]).push({user_id:account.id,kind:'courier',name,email:account.email||'',phone:'',city:'',address:'Cadastro operacional ainda não concluído',approved:false,member_status:'pending',registration_incomplete:true,created_at:account.created_at,last_active_at:account.last_sign_in_at||null,is_available:false})}
+   }catch(error){console.warn('incomplete_registrations_unavailable',{message:error.message})}
+  }
+  return reply(state);
+ }
+ if(path==='/api/delivery/pending'&&request.method==='GET')return reply(await c.upstream('/rest/v1/rpc/vuppi_courier_pending_state',{method:'POST',token:s.access,body:{},carErrors:true}));
+ if(path==='/api/delivery/customer'&&request.method==='GET'){
+  const phone=String(new URL(request.url).searchParams.get('phone')||'').replace(/\D/g,'');
+  if(phone.length<10)return reply({found:false});
+  return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'find',p_data:{phone}},carErrors:true}));
+ }
+ if(path==='/api/delivery/tracking'&&request.method==='GET'){
+  const id=new URL(request.url).searchParams.get('id');
+  if(!/^[0-9a-f-]{36}$/i.test(id||''))return c.json({message:'Entrega inválida.'},400);
+  return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_tracking',{method:'POST',token:s.access,body:{p_delivery:id},carErrors:true}));
+ }
+ if(path==='/api/delivery/action'&&request.method==='POST'){
+  const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
+  if(!['register','admin_register','availability','location','approve','member_status','admin_create','quick_delivery','profile_update','create','accept','reject','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','merchant_manage','customer_save','return_start','return_finalize'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(action==='accept')return reply(await c.upstream('/rest/v1/rpc/vuppi_accept_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action==='reject')return reply(await c.upstream('/rest/v1/rpc/vuppi_reject_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action==='arrive_pickup')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_pickup_arrive',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action==='return_start')return reply(await c.upstream('/rest/v1/rpc/vuppi_start_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action==='return_finalize')return reply(await c.upstream('/rest/v1/rpc/vuppi_finalize_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action==='complete'){const progress=await c.upstream('/rest/v1/rpc/vuppi_start_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true});if(progress?.return_required)return reply(progress);}
+  if(action==='location')return reply(await c.upstream('/rest/v1/rpc/vuppi_driver_location',{method:'POST',token:s.access,body:{p_lat:Number(data?.lat),p_lng:Number(data?.lng)},carErrors:true}));
+  if(action==='logistics_state')return reply(await c.upstream('/rest/v1/rpc/vuppi_logistics_admin',{method:'POST',token:s.access,body:{p_action:'state',p_data:{}},carErrors:true}));
+  if(action==='logistics_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_logistics_admin',{method:'POST',token:s.access,body:{p_action:'save_settings',p_data:data},carErrors:true}));
+  if(action==='delivery_type_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_logistics_admin',{method:'POST',token:s.access,body:{p_action:'save_type',p_data:data},carErrors:true}));
+  if(action==='quick_delivery')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_quick_delivery',{method:'POST',token:s.access,body:{p_member:data.id,p_enabled:!!data.enabled},carErrors:true}));
+  if(action==='remote_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_remote_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
+  if(action==='courier_return_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_courier_return_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
+  if(action==='profile_update')return reply(await c.upstream('/rest/v1/rpc/vuppi_update_courier_profile',{method:'POST',token:s.access,body:{p_data:data||{}},carErrors:true}));
+  if(action==='customer_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:data||{}},carErrors:true}));
+  if(action==='admin_create')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_create_delivery',{method:'POST',token:s.access,body:{p_data:data},carErrors:true}));
+  if(action==='member_status')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_admin',{method:'POST',token:s.access,body:{p_action:action,p_data:data||{}},carErrors:true}));
+  if(action==='cancel')return reply(await c.upstream('/rest/v1/rpc/vuppi_cancel_delivery',{method:'POST',token:s.access,body:{p_delivery:data.id,p_reason:data.reason||null},carErrors:true}));
+  if(action==='merchant_manage'){
+   const operation=String(data.operation||'');if(!['couriers','join','assign','edit','optimize'].includes(operation))return c.json({message:'Operação de pedido inválida.'},400);
+   if(operation==='optimize'){
+    const current=await rpc('state'),anchor=(current.orders||[]).find(x=>x.id===data.id);
+    if(!anchor)return c.json({message:'Entrega não encontrada.'},404);
+    const group=anchor.route_group_id?(current.orders||[]).filter(x=>x.route_group_id===anchor.route_group_id):[anchor];
+    if(group.length>1){
+     if(!c.env.GOOGLE_MAPS_SERVER_KEY)return c.json({message:'A otimização aguarda a chave segura do Google Maps.'},503);
+     const stops=group.map(x=>({location:{latLng:{latitude:Number(x.lat),longitude:Number(x.lng)}}}));
+     if(stops.some(x=>!Number.isFinite(x.location.latLng.latitude)||!Number.isFinite(x.location.latLng.longitude)))return c.json({message:'Uma das entregas não possui coordenadas válidas.'},422);
+     const origin={location:{latLng:{latitude:Number(anchor.pickup_lat),longitude:Number(anchor.pickup_lng)}}};
+     const response=await c.fetcher('https://routes.googleapis.com/directions/v2:computeRoutes',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':c.env.GOOGLE_MAPS_SERVER_KEY,'X-Goog-FieldMask':'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.optimizedIntermediateWaypointIndex'},body:JSON.stringify({origin,destination:stops.at(-1),intermediates:stops.slice(0,-1),travelMode:'TWO_WHEELER',routingPreference:'TRAFFIC_AWARE',optimizeWaypointOrder:true,languageCode:'pt-BR',units:'METRIC'}),signal:AbortSignal.timeout(15000)});
+     const body=await response.json(),route=body.routes?.[0];if(!response.ok||!route)return c.json({message:'Não foi possível otimizar esta rota no Google Maps.'},503);
+     const indexes=route.optimizedIntermediateWaypointIndex||stops.slice(0,-1).map((_,i)=>i),ordered=indexes.map(i=>group[i]?.id).filter(Boolean);ordered.push(group.at(-1).id);
+     data={...data,ordered_ids:ordered,distance_m:Number(route.distanceMeters||0),duration_s:Math.ceil(Number(String(route.duration||'0s').replace('s',''))),polyline:route.polyline?.encodedPolyline||''};
+    }
+   }
+   return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_manage_delivery',{method:'POST',token:s.access,body:{p_action:operation,p_delivery:data.id||null,p_data:data},carErrors:true}));
+  }
+  if(['register','admin_register'].includes(action)&&data.address&&(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng)))){
+   try{data={...data,...await geocode(data.address)}}catch(error){return c.json({message:error.message},400)}
+  }
+  if(action==='admin_register'){
+   const registerBilling=async()=>c.upstream('/rest/v1/rpc/vuppi_wallet_billing',{method:'POST',token:s.access,body:{p_action:'profile_create',p_data:{email:String(data.email||'').trim().toLowerCase(),free_period_days:Number(data.free_period_days||0),notes:data.billing_notes||''}},carErrors:true});
+   try{const result=await rpc(action,data||{});await registerBilling();return reply(result)}catch(error){
+    if(!/ainda não existe/i.test(error.message||''))throw error;
+    const state=await rpc('state');if(!state.admin)return c.json({message:'Acesso exclusivo do superadministrador.'},403);
+    if(!c.env.SUPABASE_SECRET_KEY)return c.json({message:'A criação de contas pelo painel aguarda a chave segura do servidor.'},503);
+    if(typeof data?.password!=='string'||data.password.length<8)return c.json({message:'Defina uma senha inicial com pelo menos 8 caracteres.'},400);
+    const created=await c.fetcher(c.env.SUPABASE_URL+'/auth/v1/admin/users',{method:'POST',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({email:String(data.email||'').trim().toLowerCase(),password:data.password,email_confirm:true,user_metadata:{name:String(data.name||'').trim()}}),signal:AbortSignal.timeout(10000)});
+    if(!created.ok){let problem={};try{problem=await created.json()}catch{}return c.json({message:problem.msg||problem.message||'Não foi possível criar a conta do estabelecimento.'},400)}
+    const safe={...data};delete safe.password;const result=await rpc(action,safe);await registerBilling();return reply(result);
+   }
+  }
+  const result=await rpc(action,data||{});
+  if(action==='create'&&data?.quote_id){await c.upstream('/rest/v1/rpc/vuppi_delivery_details',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_data:data},carErrors:true});if(data.scheduled_for)await c.upstream('/rest/v1/rpc/vuppi_schedule_delivery',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_scheduled_for:data.scheduled_for,p_lead_minutes:Number(data.dispatch_lead_minutes||10)},carErrors:true});try{await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:{phone:data.phone,name:data.recipient,address:data.destination,complement:data.complement||'',label:'Principal'}},carErrors:true})}catch(error){console.warn('customer_save_failed',{message:error.message})}}
+  return reply(result);
+ }
+ if(path==='/api/delivery/quote'&&request.method==='POST'){
+  if(!c.env.SUPABASE_SECRET_KEY)return c.json({message:'A cotação aguarda a configuração segura do servidor.'},503);
+  const data=await c.readJson(request),state=await rpc('state');let profile=state.profile,merchantId=user.id;if(data.merchant&&state.admin){profile=(state.members||[]).find(x=>x.user_id===data.merchant&&x.kind==='merchant');merchantId=data.merchant;if(!profile?.quick_delivery_enabled)return c.json({message:'A solicita\u00e7\u00e3o r\u00e1pida n\u00e3o est\u00e1 habilitada para este estabelecimento.'},403)}
+  if(!profile||profile.kind!=='merchant'||!profile.approved)return c.json({message:'O estabelecimento precisa estar aprovado.'},403);
+  let destination;if(data.destination){try{destination=await geocode(data.destination)}catch(error){return c.json({message:error.message},400)}}else destination={lat:Number(data.lat),lng:Number(data.lng),label:''};
+  const lat=destination.lat,lng=destination.lng;
+  if(!Number.isFinite(lat)||!Number.isFinite(lng))return c.json({message:'Informe um endereço de destino válido.'},400);
+  if(Math.abs(lat-profile.lat)>.3||Math.abs(lng-profile.lng)>.3)return c.json({message:'O destino precisa estar dentro da área piloto, até aproximadamente 30 km da coleta.'},400);
+  if(Date.now()<nextRoute)return c.json({message:'Aguarde alguns segundos e tente novamente.'},429);
+  nextRoute=Date.now()+1500;
+  if(!c.env.GOOGLE_MAPS_SERVER_KEY)return c.json({message:'O cálculo de rotas Google aguarda a chave segura do servidor.'},503);
+  let route;try{const res=await c.fetcher('https://routes.googleapis.com/directions/v2:computeRoutes',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':c.env.GOOGLE_MAPS_SERVER_KEY,'X-Goog-FieldMask':'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline'},body:JSON.stringify({origin:{location:{latLng:{latitude:Number(profile.lat),longitude:Number(profile.lng)}}},destination:{location:{latLng:{latitude:lat,longitude:lng}}},travelMode:'TWO_WHEELER',routingPreference:'TRAFFIC_AWARE'}),signal:AbortSignal.timeout(10000)});const result=await res.json();route=result.routes?.[0];if(!res.ok||!route||!Number.isFinite(route.distanceMeters)||route.distanceMeters<=0||route.distanceMeters>30000)throw Error()}catch{return c.json({message:'Não foi possível calcular uma rota Google de até 30 km. Ajuste o endereço ou tente mais tarde.'},503)}
+  const distance=Math.ceil(route.distanceMeters),durationSeconds=Math.max(1,Math.ceil(Number(String(route.duration||'0s').replace('s',''))));
+  const row=await c.upstream('/rest/v1/rpc/vuppi_create_quote',{method:'POST',token:s.access,body:{p_data:{merchant:merchantId,city:profile.city,lat,lng,distance_m:distance}},carErrors:true});
+  return reply({...row,destination:destination.label,duration_s:durationSeconds,route_polyline:route.polyline?.encodedPolyline||'',test_tariff:true});
+ }
+ return c.json({message:'Recurso não encontrado.'},404);
+}

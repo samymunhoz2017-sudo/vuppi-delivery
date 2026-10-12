@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {quoteDelivery} from '../server/delivery-pricing.mjs';
+const tariff={cityId:'pitangueiras-sp',enabled:true,version:'teste-1',returnCents:300,bands:[{upToM:1000,priceCents:500},{upToM:3000,priceCents:800}]};
+const input={cityId:'pitangueiras-sp',distanceM:1000};
+assert.equal(quoteDelivery(input,tariff).totalCents,500);
+assert.equal(quoteDelivery({...input,distanceM:1001},tariff).totalCents,800);
+assert.equal(quoteDelivery({...input,returnRequired:true},tariff).totalCents,800);
+assert.throws(()=>quoteDelivery({...input,distanceM:3001},tariff),/limite/);
+assert.throws(()=>quoteDelivery({...input,cityId:'outra-cidade'},tariff),/cidade/);
+assert.throws(()=>quoteDelivery(input,{...tariff,establishmentId:'loja-a'}),/estabelecimento/);
+assert.throws(()=>quoteDelivery({...input,distanceM:NaN},tariff),/Distância/);
+assert.throws(()=>quoteDelivery(input,{...tariff,bands:[{upToM:1000,priceCents:5.5}]}),/Valor/);
+const quote=quoteDelivery(input,tariff); tariff.bands[0].priceCents=900;
+assert.equal(quote.snapshot.priceCents,500);
+console.log('Delivery: limites, retorno, isolamento de cidade/estabelecimento e preservação do preço aprovados.');

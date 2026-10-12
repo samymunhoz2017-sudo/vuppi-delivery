@@ -1,0 +1,25 @@
+{
+  "id": "/entregador",
+  "name": "VUPPI · Entregador",
+  "short_name": "VUPPI Entregador",
+  "description": "Aplicativo do entregador VUPPI Delivery",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "start_url": "/entregador?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait-primary",
+  "background_color": "#12051f",
+  "theme_color": "#6a11cb",
+  "categories": ["business", "navigation", "productivity"],
+  "icons": [
+    {"src": "/icons/vuppi-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/vuppi-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/vuppi-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Ficar disponível", "short_name": "Disponível", "url": "/entregador?acao=disponivel", "icons": [{"src": "/icons/vuppi-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Minhas entregas", "short_name": "Entregas", "url": "/entregador?aba=entregas", "icons": [{"src": "/icons/vuppi-192.png", "sizes": "192x192", "type": "image/png"}]}
+  ]
+}

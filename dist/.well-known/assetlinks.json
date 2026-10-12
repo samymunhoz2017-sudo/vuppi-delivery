@@ -1,0 +1,18 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "br.com.vuppidelivery.entregador",
+      "sha256_cert_fingerprints": ["92:E8:DF:B7:38:D4:E8:32:CA:95:BE:B4:F7:16:E7:66:62:29:BB:AD:C3:6A:3E:D2:7A:5E:CC:CD:E1:2A:38:0F"]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "br.com.vuppidelivery.twa",
+      "sha256_cert_fingerprints": ["E5:44:6E:A2:AD:30:46:7D:8B:BF:3C:05:80:A1:BB:9B:E1:3D:53:7B:76:43:55:18:C8:64:4F:1B:C8:48:D7:70"]
+    }
+  }
+]

@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const activity=readFileSync(new URL('../mobile/vuppi-entregador-android/app/src/main/java/br/com/vuppidelivery/entregador/MainActivity.java',import.meta.url),'utf8');
+const service=readFileSync(new URL('../mobile/vuppi-entregador-android/app/src/main/java/br/com/vuppidelivery/entregador/CourierService.java',import.meta.url),'utf8');
+const admin=readFileSync(new URL('../dist/admin.js',import.meta.url),'utf8');
+const manifest=readFileSync(new URL('../mobile/vuppi-entregador-android/app/src/main/AndroidManifest.xml',import.meta.url),'utf8');
+const gradle=readFileSync(new URL('../mobile/vuppi-entregador-android/app/build.gradle',import.meta.url),'utf8');
+
+assert.match(activity,/compactIdleBanner\(\)/);
+assert.match(activity,/R\.drawable\.banner_vuppi/);
+assert.match(activity,/idleDock\.setVisibility\(active==null\?View\.VISIBLE:View\.GONE\)/);
+assert.match(activity,/showEarningsReceipt\(/);
+assert.match(activity,/getSharedPreferences\("vuppi\.receipts"/);
+assert.match(activity,/R\.raw\.delivery_complete/);
+assert.match(activity,/Você ganhou/);
+assert.match(activity,/private void profileDialog\(\)/);
+assert.match(activity,/Localização, bateria e permissões/);
+assert.match(activity,/Ícone flutuante/);
+assert.match(activity,/MapsInitializer\.initialize/);
+assert.match(manifest,/android:hardwareAccelerated="true"/);
+assert.match(gradle,/VUPPI_MAPS_KEY is required for release builds/);
+assert.match(gradle,/versionName '0\.62\.0'/);
+assert.match(service,/OfferDecisionStore/);
+assert.match(service,/startForeground/);
+assert.match(admin,/delivery_type_save/);
+assert.match(admin,/payload\.types\|\|\[\]/);
+assert.doesNotMatch(admin,/message\('Modalidade atualizada\.'\)/);
+
+console.log('Android nativo: banner ocioso, recibo idempotente com áudio, perfil funcional e tipos de entrega persistidos inspecionados.');

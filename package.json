@@ -1,0 +1,19 @@
+{
+  "name": "vuppi-mob",
+  "version": "0.63.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node tests/run.mjs",
+    "check": "node scripts/check.mjs",
+    "test:integration": "node tests/database.integration.mjs",
+    "start": "node server/hostinger.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
+
+
+

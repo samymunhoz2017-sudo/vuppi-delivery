@@ -1,0 +1,94 @@
+import assets from './assets.mjs';
+import {handleCarros,runCarDispatch} from './carros.mjs';
+import {handleDelivery} from './delivery.mjs';
+import {handleFinancial,paymentProvider,runFinanceBilling} from './financial.mjs';
+const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.63.1',ANDROID_VERSION='0.62.0';
+const encoder=new TextEncoder(),refreshed=new Map();
+class AppError extends Error{constructor(message,status=400,clear=false){super(message);this.status=status;this.clear=clear}}
+const secureHeaders={
+  'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
+  'Permissions-Policy':'camera=(), microphone=(), geolocation=()',
+  'Strict-Transport-Security':'max-age=31536000; includeSubDomains',
+  'Content-Security-Policy':"default-src 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com; img-src 'self' data: https://maps.googleapis.com https://maps.gstatic.com https://*.googleusercontent.com; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self' https://chatgpt.com https://*.chatgpt.com https://*.openai.com https://*.chatgpt.site"
+};
+function toBase64(bytes){let text='';for(const b of bytes)text+=String.fromCharCode(b);return btoa(text)}
+function fromBase64(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0))}
+const url64=bytes=>toBase64(bytes).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+const unurl64=value=>fromBase64(value.replace(/-/g,'+').replace(/_/g,'/'));
+function config(env){try{const url=new URL(env.SUPABASE_URL);if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/')return null;const key=env.SUPABASE_PUBLISHABLE_KEY;if(typeof key!=='string'||!key.startsWith('sb_publishable_')||!env.UP_SESSION_KEY)return null;const bytes=fromBase64(env.UP_SESSION_KEY);if(bytes.length!==32)return null;return {url:url.origin,key,bytes,city:env.UP_CITY_ID||'pitangueiras-sp'}}catch{return null}}
+async function aes(config){return crypto.subtle.importKey('raw',config.bytes,'AES-GCM',false,['encrypt','decrypt'])}
+async function encrypt(data,config,origin){const iv=crypto.getRandomValues(new Uint8Array(12));const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:encoder.encode(origin)},await aes(config),encoder.encode(JSON.stringify(data)));const value=url64(iv)+'.'+url64(new Uint8Array(encrypted));if(value.length>3800)throw new AppError('A sessão excedeu o limite permitido. Consulte o responsável pela plataforma.',502);return value}
+async function decrypt(value,config,origin){try{const [iv,body,...extra]=value.split('.');if(!iv||!body||extra.length||value.length>3800)return null;const decoded=await crypto.subtle.decrypt({name:'AES-GCM',iv:unurl64(iv),additionalData:encoder.encode(origin)},await aes(config),unurl64(body));const result=JSON.parse(new TextDecoder().decode(decoded));if(!result.access||!result.refresh||!result.until||result.until<Date.now()/1000)return null;return result}catch{return null}}
+function cookie(value,maxAge=MAX_SESSION){const expires=new Date(Date.now()+Math.max(0,maxAge)*1000).toUTCString();return `${COOKIE}=${value}; Path=/; Max-Age=${maxAge}; Expires=${expires}; HttpOnly; Secure; SameSite=Lax; Priority=High`}
+function nativeClient(request){return request.headers.get('X-Vuppi-Client')==='courier-native'}
+function cookieValue(request){const authorization=request.headers.get('Authorization')||'';if(nativeClient(request)&&authorization.startsWith('Vuppi '))return authorization.slice(6).trim();const value=(request.headers.get('Cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='));return value?value.slice(COOKIE.length+1):''}
+function publicUser(user){return {id:user.id,email:user.email||''}}
+function safePortuguese(value,fallback){return typeof value==='string'&&value.trim()&&!value.includes('\ufffd')?value:fallback}
+function apiMessage(data,status){const messages={invalid_credentials:'E-mail ou senha incorretos.',email_not_confirmed:'A confirmação de e-mail ainda está ativada no Supabase.',user_already_exists:'Já existe uma conta com este e-mail. Entre com sua senha.',email_exists:'Já existe uma conta com este e-mail.',signup_disabled:'O cadastro está desativado neste projeto.',weak_password:'Escolha uma senha mais forte conforme as regras do projeto.',PGRST205:'As permissões da central ainda precisam ser configuradas no projeto.','42P01':'As permissões da central ainda precisam ser configuradas no projeto.'};return messages[data?.error_code||data?.code]||(status===429?'Muitas tentativas. Aguarde e tente novamente.':status===401?'Sua sessão terminou. Entre novamente.':status>=500?'O serviço de autenticação está indisponível. Tente novamente.':'Não foi possível concluir a solicitação.')}
+async function input(request,maxBytes=8192){if(!request.headers.get('Content-Type')?.toLowerCase().startsWith('application/json'))throw new AppError('Envie os dados no formato esperado.',415);if(Number(request.headers.get('Content-Length'))>maxBytes)throw new AppError('Solicitação muito grande.',413);const reader=request.body?.getReader();if(!reader)return {};let size=0,text='',decoder=new TextDecoder();while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>maxBytes){await reader.cancel();throw new AppError('Solicitação muito grande.',413)}text+=decoder.decode(value,{stream:true})}text+=decoder.decode();try{const data=JSON.parse(text);if(!data||Array.isArray(data)||typeof data!=='object')throw Error();return data}catch{throw new AppError('Dados inválidos.')}}
+function credentials(data,signup=false){if(typeof data.email!=='string'||!/^\S+@\S+\.\S+$/.test(data.email.trim())||data.email.length>254||typeof data.password!=='string'||data.password.length<(signup?8:1)||data.password.length>256)throw new AppError('Informe um e-mail válido e uma senha adequada.');if(signup&&(typeof data.name!=='string'||!data.name.trim()||data.name.length>70))throw new AppError('Informe seu nome.');return {email:data.email.trim(),password:data.password}}
+function makeSession(data,previous,duration=MAX_SESSION){if(!data?.access_token||!data?.refresh_token)throw new AppError('Não foi possível estabelecer uma sessão.',502);const now=Math.floor(Date.now()/1000);return {access:data.access_token,refresh:data.refresh_token,exp:now+(data.expires_in||3600),until:previous?.until||now+duration,remember:previous?.remember??duration>MAX_SESSION}}
+export function createWorker(assetMap=assets,fetcher=(...args)=>fetch(...args)){
+ return {async fetch(request,env){
+  const url=new URL(request.url),headers=new Headers(secureHeaders);let renewed=null;if(['/carros','/carros.html'].includes(url.pathname))headers.set('Content-Security-Policy',secureHeaders['Content-Security-Policy'].replace("connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com","connect-src 'self' https://maps.googleapis.com https://maps.gstatic.com wss://"+url.host));
+  if(['/entregas','/delivery.html','/admin'].includes(url.pathname)){headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',secureHeaders['Content-Security-Policy']);}
+  const json=(data,status=200)=>{headers.set('Content-Type','application/json; charset=utf-8');headers.set('Cache-Control','no-store');return new Response(JSON.stringify(data),{status,headers})};
+  try{
+   if(!url.pathname.startsWith('/api/')){if(!['GET','HEAD'].includes(request.method))return new Response('Método não permitido.',{status:405,headers});if(url.pathname==='/entregas'){headers.set('Location','/entregador'+url.search);headers.set('Cache-Control','no-store');return new Response(null,{status:302,headers})}const pageRoutes={'/':'/index.html','/index.html':'/index.html','/operacao':'/delivery.html','/central':'/delivery.html','/estabelecimento':'/delivery.html','/entregador':'/delivery.html','/carros':'/carros.html','/admin':'/admin.html'};const entry=assetMap[pageRoutes[url.pathname]||url.pathname];if(!entry)return new Response('Página não encontrada.',{status:404,headers});if(['/carros','/carros.html','/entregador'].includes(url.pathname))headers.set('Permissions-Policy','camera=(), microphone=(), geolocation=(self)');if(['/operacao','/central','/estabelecimento','/entregador','/delivery.html'].includes(url.pathname)){headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',secureHeaders['Content-Security-Policy']);}headers.set('Content-Type',entry.type);headers.set('Cache-Control','no-store');if(url.pathname==='/downloads/vuppi-entregador.apk')headers.set('Content-Disposition','attachment; filename="Vuppi-Entregador-0.62.0.apk"');let body=entry.encoding==='base64'?fromBase64(entry.body):entry.body;if(url.pathname==='/entregador'&&typeof body==='string')body=body.replace('/manifest.webmanifest?v=62','/manifest-courier.webmanifest?v=62');return new Response(request.method==='HEAD'?null:body,{headers})}
+   if(url.protocol!=='https:')throw new AppError('O login protegido exige HTTPS.',400);
+   if(request.headers.get('Sec-Fetch-Site')==='cross-site'||(request.method==='POST'&&!nativeClient(request)&&request.headers.get('Origin')!==url.origin))throw new AppError('Origem não autorizada.',403);
+   if(url.pathname==='/api/app/version'&&request.method==='GET'){
+    const latest=env.UP_ANDROID_LATEST_VERSION||ANDROID_VERSION,minimum=env.UP_ANDROID_MINIMUM_VERSION||env.UP_ANDROID_MIN_VERSION||'0.55.0',rollout=Math.max(0,Math.min(100,Number(env.UP_ANDROID_ROLLOUT_PERCENTAGE||100)));
+    return json({platform:url.searchParams.get('platform')||'web',environment:'production',current_web_version:WEB_VERSION,latest_version:latest,minimum_supported_version:minimum,update_type:env.UP_ANDROID_UPDATE_TYPE==='required'?'required':'optional',store_url:env.UP_ANDROID_STORE_URL||'/downloads/vuppi-entregador.apk',title:safePortuguese(env.UP_ANDROID_UPDATE_TITLE,'Atualiza\u00e7\u00e3o dispon\u00edvel'),message:safePortuguese(env.UP_ANDROID_UPDATE_MESSAGE,'Atualize para receber melhorias de estabilidade e seguran\u00e7a.'),released_at:env.UP_ANDROID_RELEASED_AT||'',active:env.UP_ANDROID_UPDATE_ACTIVE==='true',rollout_percentage:rollout});
+   }
+   const options=config(env);
+   if(url.pathname==='/api/auth/status'&&request.method==='GET')return json({ready:!!options});
+   if(url.pathname==='/api/maps/config'&&request.method==='GET')return json({provider:'google',ready:!!env.GOOGLE_MAPS_BROWSER_KEY,browserKey:env.GOOGLE_MAPS_BROWSER_KEY||''});
+   if(!options)throw new AppError('A configuração segura do servidor está pendente.',503);
+   async function upstream(path,{method='GET',body,token,carErrors=false}={}){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);try{const res=await fetcher(options.url+path,{method,headers:{apikey:options.key,...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:controller.signal});let data;try{data=await res.json()}catch{}if(!res.ok){const safeDomainMessage=carErrors&&typeof data?.message==='string'&&(data.message.startsWith('UP_CAR:')||data.message.startsWith('VUPPI_FINANCE:'));const message=safeDomainMessage?data.message.replace(/^(UP_CAR:|VUPPI_FINANCE:)\s*/, '').slice(0,250):carErrors&&data?.code==='23505'?'Operação duplicada ou corrida já atribuída. Atualize o atendimento.':apiMessage(data,res.status);throw new AppError(message,res.status===429?429:res.status===401?401:res.status>=500?502:400)}return data}catch(e){if(e instanceof AppError)throw e;throw new AppError('Não foi possível conectar ao serviço de autenticação.',502)}finally{clearTimeout(timer)}}
+   async function session(){let s=await decrypt(cookieValue(request),options,url.origin);if(!s)throw new AppError('Entre para continuar.',401,true);
+    async function refreshSession(){const digest=url64(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(options.url+s.refresh))));let entry=refreshed.get(digest);if(!entry||entry.until<Date.now()){const promise=upstream('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:s.refresh}}).then(data=>makeSession(data,s));entry={promise,until:Date.now()+10000};refreshed.set(digest,entry);if(refreshed.size>200)refreshed.delete(refreshed.keys().next().value)}try{s=await entry.promise;renewed=s}catch(e){refreshed.delete(digest);throw new AppError(e.message,e.status,e.status===400||e.status===401)}}
+    if(s.exp<Date.now()/1000+60)await refreshSession();let user;try{user=await upstream('/auth/v1/user',{token:s.access})}catch(e){if(e.status!==401)throw e;await refreshSession();user=await upstream('/auth/v1/user',{token:s.access})}if(!user?.id)throw new AppError('Sessão inválida.',401,true);if(s.remember){s.until=Math.floor(Date.now()/1000)+REMEMBER_SESSION;renewed=s}return {s,user};
+   }
+   async function platformStatus(token){try{return await upstream('/rest/v1/rpc/up_platform_status',{method:'POST',token,body:{}})}catch{return {super_admin:false,car_staff:[]}}}
+   async function access(token,user){const platform=await platformStatus(token);if(platform.super_admin===true)return [{cidade_id:options.city,papel:'master',ativo:true,super_admin:true}];const rows=await upstream('/rest/v1/up_acessos?select=usuario_id,cidade_id,papel,ativo&usuario_id=eq.'+encodeURIComponent(user.id),{token});return (Array.isArray(rows)?rows:[]).filter(r=>r.usuario_id===user.id&&r.cidade_id===options.city&&r.ativo===true&&['master','gestor','central'].includes(r.papel)).map(({cidade_id,papel,ativo})=>({cidade_id,papel,ativo}))}
+   async function renewCookie(){if(renewed){const sealed=await encrypt(renewed,options,url.origin);if(nativeClient(request))headers.set('X-Vuppi-Session',sealed);else headers.append('Set-Cookie',cookie(sealed,Math.max(0,Math.floor(renewed.until-Date.now()/1000))))}}
+   if(url.pathname.startsWith('/api/admin/')){
+    const {s}=await session();
+    if(url.pathname==='/api/admin/status'&&request.method==='GET'){const result=await platformStatus(s.access);await renewCookie();return json(result)}
+    if((await platformStatus(s.access)).super_admin!==true)throw new AppError('Acesso exclusivo do superadministrador.',403);
+    let action,data={};
+    if(url.pathname==='/api/admin/action'&&request.method==='POST'){const body=await input(request);action=body.action;data=body.data||{};if(!['city_save','grant_superadmin','car_role','central_role'].includes(action))throw new AppError('Ação administrativa inválida.');}
+    else if(request.method==='GET'&&['overview','cities','users','audit'].includes(url.pathname.split('/').at(-1))){action=url.pathname.split('/').at(-1);data={search:url.searchParams.get('search')||'',offset:url.searchParams.get('offset')||'0'}}
+    else if(url.pathname==='/api/admin/health'&&request.method==='GET'){const settings=await upstream('/auth/v1/settings');await renewCookie();return json({auth_connected:true,email_confirmation:settings.mailer_autoconfirm!==true,signup_disabled:settings.disable_signup===true,maps_configured:!!env.GOOGLE_MAPS_SERVER_KEY,dispatch_configured:!!env.SUPABASE_SECRET_KEY,payments:'not_integrated'})}
+    else throw new AppError('Recurso administrativo não encontrado.',404);
+    const result=await upstream('/rest/v1/rpc/up_platform_command',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});await renewCookie();return json(result);
+   }
+   if(url.pathname.startsWith('/api/finance/'))return await handleFinancial(request,{env,fetcher,session,upstream,readJson:input,json,renewCookie,paymentProvider:()=>paymentProvider(env,fetcher)});
+   if(url.pathname.startsWith('/api/delivery/'))return await handleDelivery(request,{env,fetcher,session,upstream,readJson:input,json,renewCookie});
+   if(url.pathname.startsWith('/api/carros/'))return await handleCarros(request,{env,fetcher,session,upstream,platformStatus,readJson:input,json,renewCookie,binary:(body,type,extra={})=>{headers.set('Content-Type',type);headers.set('Cache-Control','no-store');for(const [key,value] of Object.entries(extra))headers.set(key,value);return new Response(body,{headers})}});
+   if(['/api/auth/login','/api/auth/signup'].includes(url.pathname)&&request.method==='POST'){
+    const data=await input(request),signup=url.pathname.endsWith('/signup'),cred=credentials(data,signup);let result;
+    if(signup){const settings=await upstream('/auth/v1/settings');if(settings?.mailer_autoconfirm!==true)throw new AppError('Desative Confirm email no Supabase antes de cadastrar sem confirmação.');result=await upstream('/auth/v1/signup',{method:'POST',body:{...cred,data:{full_name:data.name.trim()}}})}else result=await upstream('/auth/v1/token?grant_type=password',{method:'POST',body:cred});
+    const duration=data.remember===true?REMEMBER_SESSION:MAX_SESSION,s=makeSession(result,null,duration),user=await upstream('/auth/v1/user',{token:s.access});if(!user?.id)throw new AppError('Não foi possível validar a conta.',502);const sealed=await encrypt(s,options,url.origin);if(nativeClient(request))return json({user:publicUser(user),session:sealed});headers.append('Set-Cookie',cookie(sealed,duration));return json({user:publicUser(user)});
+   }
+   if(url.pathname==='/api/auth/logout'&&request.method==='POST'){const s=await decrypt(cookieValue(request),options,url.origin);let remote=true;if(s){try{await upstream('/auth/v1/logout?scope=local',{method:'POST',token:s.access})}catch{remote=false}}headers.append('Set-Cookie',cookie('',0));return json({signedOut:true,remote})}
+   if(['/api/auth/session','/api/auth/access'].includes(url.pathname)&&request.method==='GET'){const {s,user}=await session(),rows=await access(s.access,user);await renewCookie();return json(url.pathname.endsWith('/access')?{access:rows}:{user:publicUser(user),hasAccess:rows.length>0})}
+   return json({message:'Recurso não encontrado.'},404);
+  }catch(error){if(error.clear)headers.append('Set-Cookie',cookie('',0));return json({message:error instanceof AppError?error.message:'Não foi possível concluir a solicitação.'},error instanceof AppError?error.status:500)}
+ }};
+}
+const application=createWorker();
+application.scheduled=(event,env,ctx)=>{
+ const date=new Date(event?.scheduledTime||Date.now()).toISOString().slice(0,10);
+ const billingActive=env.VUPPI_BILLING_SCHEDULE_ACTIVE==='true';
+ ctx.waitUntil(Promise.allSettled([
+  runCarDispatch(env),
+  runFinanceBilling(env,fetch,{dryRun:!billingActive,runKey:`scheduled-${date}`})
+ ]));
+};
+export default application;
+
+
+
+
