@@ -48,3 +48,21 @@ body{border:0!important;outline:0!important}.header{border:0!important;box-shado
 @media(max-width:1100px){.admin-authenticated .admin-title{grid-template-columns:1fr auto}.admin-command{grid-column:1/-1;grid-row:2}.finance-kpis{grid-template-columns:repeat(2,1fr)}.finance-overview-grid,.finance-lower-grid{grid-template-columns:1fr}}
 @media(max-width:900px){.admin-authenticated .admin-layout{display:block}.admin-authenticated .admin-sidebar{background:#091727;border-color:var(--admin-border)}.admin-authenticated .admin-title{display:flex}.admin-authenticated .admin-command{width:100%;order:3}.admin-authenticated .menu-group button{color:#b6c3d5}.admin-plan{display:none}}
 @media(max-width:620px){.admin-authenticated .container{padding-inline:12px}.admin-authenticated .admin-title{gap:12px}.admin-authenticated .live-pill{display:none}.finance-kpis{grid-template-columns:1fr}.finance-overview-grid,.finance-lower-grid{display:block}.finance-overview-grid>*+*,.finance-lower-grid>*+*{margin-top:12px}.finance-bars{gap:5px}.finance-quick-actions{grid-template-columns:1fr}.admin-authenticated #admin-message{right:12px;top:68px}.finance-head{align-items:flex-start;flex-direction:column}}
+
+/* Vuppi Admin v0.64 — contraste consistente em módulos legados */
+.admin-authenticated #admin-view{color:var(--admin-text)}
+.admin-authenticated #admin-view :is(p,span,small,label,legend,dt,dd){border-color:var(--admin-border)}
+.admin-authenticated #admin-view :is(.notice,.quick-feedback,.member-filter,.advanced-filters,.filter-summary,.live-map-strip){background:#102036!important;color:#cbd7e7!important;border-color:var(--admin-border)!important}
+.admin-authenticated #admin-view :is(.courier-status-tabs,.courier-filters,.courier-results,.courier-profile-drawer,.courier-profile-drawer>header,.courier-profile-drawer>nav,.profile-kpis article,.profile-detail-grid>div,.profile-status-panel>div,.profile-permission-list label,.profile-delivery-list>div,.courier-mobile-card){background:#0d1b2d!important;color:var(--admin-text)!important;border-color:var(--admin-border)!important;box-shadow:none}
+.admin-authenticated #admin-view :is(.courier-admin-head p,.courier-filters label,.courier-table td,.courier-identity small,.courier-profile-drawer header small,.courier-profile-drawer>nav button,.profile-kpis span,.profile-detail-grid span,.profile-status-panel span,.profile-permission-list small,.profile-delivery-list small,.courier-mobile-card small,.courier-mobile-card em){color:var(--admin-muted)!important}
+.admin-authenticated #admin-view :is(.courier-table th){background:#091727!important;color:#9cadc2!important}
+.admin-authenticated #admin-view :is(.courier-table td){background:#0d1b2d!important;color:#dce6f3!important;border-color:var(--admin-border)!important}
+.admin-authenticated #admin-view .courier-table tbody tr:hover td{background:#142840!important}
+.admin-authenticated #admin-view .courier-profile-backdrop{background:#020711aa}
+.admin-authenticated #admin-view .profile-note{background:#332913!important;color:#ffe2a5!important;border:1px solid #6f5724}
+.admin-authenticated #admin-view :is(.period-chip,.courier-status-tabs button){background:#13243a!important;color:#b9c7d9!important;border-color:#29415c!important}
+.admin-authenticated #admin-view :is(.period-chip.active,.courier-status-tabs button.active){background:linear-gradient(135deg,#7141ec,#4a2bbf)!important;color:#fff!important}
+.admin-authenticated #admin-view option{background:#0d1b2d;color:#eef3fa}
+.admin-authenticated #admin-view ::placeholder{color:#71839a!important;opacity:1}
+.admin-authenticated #admin-view a:not(.request-delivery):not(.action-success){color:#9bbcff}
+.admin-authenticated #admin-view .notice{box-shadow:inset 3px 0 #7c3cff}

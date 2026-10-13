@@ -9,12 +9,13 @@ if (buildingRelease && !mapsKey) {
 android {
     namespace 'br.com.vuppidelivery.entregador'
     compileSdk 36
+    buildFeatures { buildConfig true }
     defaultConfig {
         applicationId 'br.com.vuppidelivery.entregador'
         minSdk 24
         targetSdk 36
-        versionCode 62
-        versionName '0.62.0'
+        versionCode 64
+        versionName '0.64.0'
         manifestPlaceholders = [GOOGLE_MAPS_ANDROID_KEY: mapsKey]
     }
     signingConfigs {

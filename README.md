@@ -4,7 +4,7 @@ Plataforma de entregas locais com painel administrativo, área do estabeleciment
 
 ## Versão atual
 
-`0.63.1`
+`0.64.0`
 
 Esta versão consolida a estabilização do recebimento de ofertas no Android e atualiza a plataforma web com um novo centro de comando administrativo, Vuppi Wallet baseada no ledger real, entrega rápida sem recarregar a sessão, gestão de consumidores do estabelecimento e Google Maps validado no ambiente publicado.
 
