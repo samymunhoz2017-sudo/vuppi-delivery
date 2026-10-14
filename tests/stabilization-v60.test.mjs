@@ -35,6 +35,6 @@ assert.match(deliveryHtml,/Ao concluir, seu cadastro entrar&aacute; automaticame
 assert.match(adminApp,/liveMapView/);
 assert.match(adminApp,/liveCourierMarkers/);
 assert.match(adminApp,/setInterval\(async\(\)=>\{if\(tab!=='driverMap'\)/);
-assert.match(admin,/Pendências e reoferta/);
+assert.match(adminApp,/Ofertas e pendências/);
 assert.ok(!migration.match(/drop\s+(table|schema)|truncate|delete\s+from/i),'migration v60 não pode apagar dados');
 console.log('V60: clientes isolados, pendências, reoferta, resumo financeiro e recibo Android verificadas.');

@@ -46,7 +46,7 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
-  if(!['register','admin_register','availability','location','approve','member_status','admin_create','quick_delivery','profile_update','create','accept','reject','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','merchant_manage','customer_save','return_start','return_finalize'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(!['register','admin_register','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','merchant_manage','customer_save','return_start','return_finalize'].includes(action))return c.json({message:'Ação inválida.'},400);
   if(action==='accept')return reply(await c.upstream('/rest/v1/rpc/vuppi_accept_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='reject')return reply(await c.upstream('/rest/v1/rpc/vuppi_reject_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='arrive_pickup')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_pickup_arrive',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
@@ -62,7 +62,12 @@ export async function handleDelivery(request,c){
   if(action==='courier_return_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_courier_return_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
   if(action==='profile_update')return reply(await c.upstream('/rest/v1/rpc/vuppi_update_courier_profile',{method:'POST',token:s.access,body:{p_data:data||{}},carErrors:true}));
   if(action==='customer_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:data||{}},carErrors:true}));
-  if(action==='admin_create')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_create_delivery',{method:'POST',token:s.access,body:{p_data:data},carErrors:true}));
+  if(action==='admin_create'){
+   const result=await c.upstream('/rest/v1/rpc/vuppi_create_delivery_transaction',{method:'POST',token:s.access,body:{p_data:data},carErrors:true});
+   if(data.scheduled_for)await c.upstream('/rest/v1/rpc/vuppi_schedule_delivery',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_scheduled_for:data.scheduled_for,p_lead_minutes:Number(data.dispatch_lead_minutes||10)},carErrors:true});
+   return reply(result);
+  }
+  if(action==='admin_manage')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_manage_delivery',{method:'POST',token:s.access,body:{p_action:data.operation,p_delivery:data.id,p_data:data},carErrors:true}));
   if(action==='member_status')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_admin',{method:'POST',token:s.access,body:{p_action:action,p_data:data||{}},carErrors:true}));
   if(action==='cancel')return reply(await c.upstream('/rest/v1/rpc/vuppi_cancel_delivery',{method:'POST',token:s.access,body:{p_delivery:data.id,p_reason:data.reason||null},carErrors:true}));
   if(action==='merchant_manage'){
@@ -99,8 +104,10 @@ export async function handleDelivery(request,c){
     const safe={...data};delete safe.password;const result=await rpc(action,safe);await registerBilling();return reply(result);
    }
   }
-  const result=await rpc(action,data||{});
-  if(action==='create'&&data?.quote_id){await c.upstream('/rest/v1/rpc/vuppi_delivery_details',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_data:data},carErrors:true});if(data.scheduled_for)await c.upstream('/rest/v1/rpc/vuppi_schedule_delivery',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_scheduled_for:data.scheduled_for,p_lead_minutes:Number(data.dispatch_lead_minutes||10)},carErrors:true});try{await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:{phone:data.phone,name:data.recipient,address:data.destination,complement:data.complement||'',label:'Principal'}},carErrors:true})}catch(error){console.warn('customer_save_failed',{message:error.message})}}
+  const result=action==='create'
+   ?await c.upstream('/rest/v1/rpc/vuppi_create_delivery_transaction',{method:'POST',token:s.access,body:{p_data:data},carErrors:true})
+   :await rpc(action,data||{});
+  if(action==='create'&&data?.quote_id){if(data.scheduled_for)await c.upstream('/rest/v1/rpc/vuppi_schedule_delivery',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_scheduled_for:data.scheduled_for,p_lead_minutes:Number(data.dispatch_lead_minutes||10)},carErrors:true});try{await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:{phone:data.phone,name:data.recipient,address:data.destination,complement:data.complement||'',label:'Principal'}},carErrors:true})}catch(error){console.warn('customer_save_failed',{message:error.message})}}
   return reply(result);
  }
  if(path==='/api/delivery/quote'&&request.method==='POST'){
