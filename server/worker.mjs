@@ -2,7 +2,7 @@ import assets from './assets.mjs';
 import {handleCarros,runCarDispatch} from './carros.mjs';
 import {handleDelivery} from './delivery.mjs';
 import {handleFinancial,paymentProvider,runFinanceBilling} from './financial.mjs';
-const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.65.0',ANDROID_VERSION='0.64.0';
+const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.65.1',ANDROID_VERSION='0.65.0';
 const encoder=new TextEncoder(),refreshed=new Map();
 class AppError extends Error{constructor(message,status=400,clear=false){super(message);this.status=status;this.clear=clear}}
 const secureHeaders={
@@ -62,7 +62,7 @@ export function createWorker(assetMap=assets,fetcher=(...args)=>fetch(...args)){
     let action,data={};
     if(url.pathname==='/api/admin/action'&&request.method==='POST'){const body=await input(request);action=body.action;data=body.data||{};if(!['city_save','grant_superadmin','car_role','central_role'].includes(action))throw new AppError('Ação administrativa inválida.');}
     else if(request.method==='GET'&&['overview','cities','users','audit'].includes(url.pathname.split('/').at(-1))){action=url.pathname.split('/').at(-1);data={search:url.searchParams.get('search')||'',offset:url.searchParams.get('offset')||'0'}}
-    else if(url.pathname==='/api/admin/health'&&request.method==='GET'){const settings=await upstream('/auth/v1/settings');await renewCookie();return json({auth_connected:true,email_confirmation:settings.mailer_autoconfirm!==true,signup_disabled:settings.disable_signup===true,maps_configured:!!env.GOOGLE_MAPS_SERVER_KEY,dispatch_configured:!!env.SUPABASE_SECRET_KEY,payments:'not_integrated'})}
+    else if(url.pathname==='/api/admin/health'&&request.method==='GET'){const settings=await upstream('/auth/v1/settings');await renewCookie();return json({auth_connected:true,email_confirmation:settings.mailer_autoconfirm!==true,signup_disabled:settings.disable_signup===true,maps_configured:!!env.GOOGLE_MAPS_SERVER_KEY,dispatch_configured:!!env.SUPABASE_SECRET_KEY,payments:'ledger_active',external_payments:env.ASAAS_ENABLED==='true'})}
     else throw new AppError('Recurso administrativo não encontrado.',404);
     const result=await upstream('/rest/v1/rpc/up_platform_command',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});await renewCookie();return json(result);
    }
