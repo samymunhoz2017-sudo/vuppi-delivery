@@ -1,5 +1,5 @@
 // Rotas públicas de baixo volume. Somente o servidor calcula e grava cotações.
-let nextRoute=0;
+let nextRoute=0;const liveRouteWindows=new Map();
 export async function handleDelivery(request,c){
  const {s,user}=await c.session(),path=new URL(request.url).pathname;
  const rpc=async(action,data={})=>c.upstream('/rest/v1/rpc/vuppi_delivery',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});
@@ -43,6 +43,20 @@ export async function handleDelivery(request,c){
   const id=new URL(request.url).searchParams.get('id');
   if(!/^[0-9a-f-]{36}$/i.test(id||''))return c.json({message:'Entrega inválida.'},400);
   return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_tracking',{method:'POST',token:s.access,body:{p_delivery:id},carErrors:true}));
+ }
+ if(path==='/api/delivery/route'&&request.method==='GET'){
+  const params=new URL(request.url).searchParams,id=params.get('id'),rawLat=params.get('lat'),rawLng=params.get('lng'),lat=rawLat===null?NaN:Number(rawLat),lng=rawLng===null?NaN:Number(rawLng);
+  if(!/^[0-9a-f-]{36}$/i.test(id||''))return c.json({message:'Entrega inválida.'},400);
+  const routeWindowKey=String(user.id||'anonymous'),now=Date.now(),allowedAt=liveRouteWindows.get(routeWindowKey)||0;if(now<allowedAt)return c.json({message:'A rota já está atualizada.'},429);liveRouteWindows.set(routeWindowKey,now+2000);if(liveRouteWindows.size>1000)for(const [key,until] of liveRouteWindows)if(until<now)liveRouteWindows.delete(key);
+  if(!c.env.GOOGLE_MAPS_SERVER_KEY)return c.json({message:'A navegação aguarda a chave segura do Google Maps.'},503);
+  const tracking=await c.upstream('/rest/v1/rpc/vuppi_delivery_tracking',{method:'POST',token:s.access,body:{p_delivery:id},carErrors:true});
+  const returning=tracking?.return_required&&tracking?.return_started_at,status=String(tracking?.status||''),originLat=Number.isFinite(lat)?lat:Number(tracking?.courier_lat),originLng=Number.isFinite(lng)?lng:Number(tracking?.courier_lng),targetLat=returning?Number(tracking?.pickup_lat):status==='collected'?Number(tracking?.destination_lat):Number(tracking?.pickup_lat),targetLng=returning?Number(tracking?.pickup_lng):status==='collected'?Number(tracking?.destination_lng):Number(tracking?.pickup_lng);
+  if(!Number.isFinite(originLat)||!Number.isFinite(originLng)||Math.abs(originLat)>90||Math.abs(originLng)>180)return c.json({message:'Aguardando a localização atual do entregador.'},409);
+  if(!Number.isFinite(targetLat)||!Number.isFinite(targetLng)||Math.abs(targetLat)>90||Math.abs(targetLng)>180)return c.json({message:'O destino desta etapa não possui coordenadas válidas.'},422);
+  const response=await c.fetcher('https://routes.googleapis.com/directions/v2:computeRoutes',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':c.env.GOOGLE_MAPS_SERVER_KEY,'X-Goog-FieldMask':'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline'},body:JSON.stringify({origin:{location:{latLng:{latitude:originLat,longitude:originLng}}},destination:{location:{latLng:{latitude:targetLat,longitude:targetLng}}},travelMode:'TWO_WHEELER',routingPreference:'TRAFFIC_AWARE',languageCode:'pt-BR',units:'METRIC'}),signal:AbortSignal.timeout(12000)});
+  const body=await response.json(),route=body.routes?.[0];
+  if(!response.ok||!route?.polyline?.encodedPolyline)return c.json({message:'Não foi possível atualizar a rota agora.'},503);
+  return reply({delivery_id:id,status,returning:!!returning,origin:{lat:originLat,lng:originLng},target:{lat:targetLat,lng:targetLng},polyline:route.polyline.encodedPolyline,distance_m:Number(route.distanceMeters||0),duration_s:Math.max(0,Math.ceil(Number(String(route.duration||'0s').replace('s','')))),generated_at:new Date().toISOString()});
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};

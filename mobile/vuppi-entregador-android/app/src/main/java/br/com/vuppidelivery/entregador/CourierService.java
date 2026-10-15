@@ -45,13 +45,13 @@ public class CourierService extends Service {
   private void startLocationUpdatesIfAllowed(){
     if(updatesStarted||ActivityCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)return;
     updatesStarted=true;callback=new LocationCallback(){@Override public void onLocationResult(LocationResult r){Location p=r.getLastLocation();if(p!=null){lastLocation=p;new Thread(()->sendLocation(p),"vuppi-location").start();}}};
-    LocationRequest req=new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,12000).setMinUpdateIntervalMillis(7000).setMinUpdateDistanceMeters(8).build();location.requestLocationUpdates(req,callback,Looper.getMainLooper());
+    LocationRequest req=new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,4000).setMinUpdateIntervalMillis(2000).setMinUpdateDistanceMeters(3).setWaitForAccurateLocation(false).build();location.requestLocationUpdates(req,callback,Looper.getMainLooper());
   }
   private void sendLocation(Location p){try{JSONObject d=new JSONObject();d.put("lat",p.getLatitude());d.put("lng",p.getLongitude());api.action("location",d);}catch(Exception ignored){}}
   private void tick(Location p){
     if(!checking.compareAndSet(false,true))return;
     try{
-      if(!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);if(p!=null)sendLocation(p);
+      if(!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);
       JSONObject state=api.get("/api/delivery/state");JSONArray offers=state.optJSONArray("offers");JSONObject offer=firstEligibleOffer(offers);String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
       main.post(()->presentOffer(offer,observation));flushPendingRejections();
     }catch(Exception ignored){}finally{checking.set(false);}
