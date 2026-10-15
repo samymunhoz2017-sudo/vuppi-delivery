@@ -46,7 +46,7 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
-  if(!['register','admin_register','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','merchant_manage','customer_save','return_start','return_finalize'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','merchant_manage','customer_save','return_start','return_finalize'].includes(action))return c.json({message:'Ação inválida.'},400);
   if(action==='accept')return reply(await c.upstream('/rest/v1/rpc/vuppi_accept_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='reject')return reply(await c.upstream('/rest/v1/rpc/vuppi_reject_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='arrive_pickup')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_pickup_arrive',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
@@ -89,7 +89,39 @@ export async function handleDelivery(request,c){
    }
    return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_manage_delivery',{method:'POST',token:s.access,body:{p_action:operation,p_delivery:data.id||null,p_data:data},carErrors:true}));
   }
-  if(['register','admin_register'].includes(action)&&data.address&&(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng)))){
+  if(['admin_courier_register','admin_member_update'].includes(action)){
+   const state=await rpc('state');if(!state.admin)return c.json({message:'Acesso exclusivo do superadministrador.'},403);
+   if(!c.env.SUPABASE_SECRET_KEY)return c.json({message:'A manutenção de cadastros aguarda a chave segura do servidor.'},503);
+   const clean=(value,max=250)=>String(value||'').trim().slice(0,max),id=clean(data.id,40),kind=action==='admin_courier_register'?'courier':clean(data.kind,20);
+   if(kind!=='courier'&&kind!=='merchant')return c.json({message:'Tipo de cadastro inválido.'},400);
+   const name=clean(data.name,100),phone=clean(data.phone,30),city=clean(data.city,60),address=clean(data.address,250);
+   if(name.length<2||phone.replace(/\D/g,'').length<10||address.length<5)return c.json({message:'Informe nome, telefone com DDD e endereço completo.'},400);
+   if(!(state.cities||[]).some(row=>row.id===city))return c.json({message:'Cidade indisponível.'},400);
+   if(action==='admin_member_update'){
+    if(!/^[0-9a-f-]{36}$/i.test(id||''))return c.json({message:'Cadastro inválido.'},400);
+    const payload={name,phone,city,address};for(const field of ['legal_name','cnpj','contract_number'])if(data[field]!=null)payload[field]=clean(data[field],140)||null;
+    const updated=await c.fetcher(c.env.SUPABASE_URL+'/rest/v1/vuppi_members?user_id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
+    if(!updated.ok){let problem={};try{problem=await updated.json()}catch{}return c.json({message:problem.message||'Não foi possível atualizar o cadastro.'},400)}
+    return reply({ok:true,user_id:id,profile:(await updated.json().catch(()=>[]))[0]||payload});
+   }
+   let userId=id;
+   if(action==='admin_courier_register'&&!userId){
+    const email=clean(data.email,254).toLowerCase(),password=String(data.password||'');
+    if(!/^\S+@\S+\.\S+$/.test(email)||password.length<8)return c.json({message:'Informe e-mail válido e senha inicial com pelo menos 8 caracteres.'},400);
+    const created=await c.fetcher(c.env.SUPABASE_URL+'/auth/v1/admin/users',{method:'POST',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password,email_confirm:true,user_metadata:{full_name:name,name}}),signal:AbortSignal.timeout(10000)});
+    let account={};try{account=await created.json()}catch{}
+    if(!created.ok)return c.json({message:account.msg||account.message||'Não foi possível criar a conta do entregador.'},400);
+    userId=account.id;
+   }
+   if(!/^[0-9a-f-]{36}$/i.test(userId||''))return c.json({message:'Conta do entregador inválida.'},400);
+   const payload={user_id:userId,kind,name,phone,city,address,approved:false,member_status:'pending',is_available:false};
+   const endpoint=c.env.SUPABASE_URL+'/rest/v1/vuppi_members?on_conflict=user_id',saved=await c.fetcher(endpoint,{method:'POST',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation,resolution=merge-duplicates'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
+   if(!saved.ok){let problem={};try{problem=await saved.json()}catch{}return c.json({message:problem.message||'Não foi possível salvar o cadastro operacional.'},400)}
+   return reply({ok:true,user_id:userId,profile:(await saved.json().catch(()=>[]))[0]||payload});
+  }
+  if(action==='register'&&data.kind==='courier'&&data.address&&(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng)))){
+   try{data={...data,...await geocode(data.address)}}catch{data={...data,lat:null,lng:null}}
+  }else if(['register','admin_register'].includes(action)&&data.address&&(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng)))){
    try{data={...data,...await geocode(data.address)}}catch(error){return c.json({message:error.message},400)}
   }
   if(action==='admin_register'){
