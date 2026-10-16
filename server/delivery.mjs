@@ -119,7 +119,7 @@ export async function handleDelivery(request,c){
    if(!(state.cities||[]).some(row=>row.id===city))return c.json({message:'Cidade indisponível.'},400);
    if(action==='admin_member_update'){
     if(!/^[0-9a-f-]{36}$/i.test(id||''))return c.json({message:'Cadastro inválido.'},400);
-    const payload={name,phone,city,address};for(const field of ['legal_name','cnpj','contract_number'])if(data[field]!=null)payload[field]=clean(data[field],140)||null;
+    const payload={name,phone,city,address};for(const field of ['legal_name','cnpj','contract_number','vehicle_model','vehicle_plate','vehicle_model_2','vehicle_plate_2','document_cpf','document_cnh'])if(data[field]!=null)payload[field]=clean(data[field],140)||null;
     const updated=await c.fetcher(c.env.SUPABASE_URL+'/rest/v1/vuppi_members?user_id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
     if(!updated.ok){let problem={};try{problem=await updated.json()}catch{}return c.json({message:problem.message||'Não foi possível atualizar o cadastro.'},400)}
     return reply({ok:true,user_id:id,profile:(await updated.json().catch(()=>[]))[0]||payload});
