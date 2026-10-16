@@ -14,3 +14,5 @@ await import('./wallet-billing.test.mjs');
 await import('./stabilization-v60.test.mjs');
 await import('./admin-p0.test.mjs');
 await import('./admin-v65.test.mjs');
+
+await import('./pricing-routing-v67.test.mjs');

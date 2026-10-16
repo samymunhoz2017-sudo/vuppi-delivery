@@ -22,7 +22,8 @@ assert.match(android,/Ofertas atuais e decisões registradas nas últimas 24 hor
 assert.match(android,/api\.get\("\/api\/finance\/summary\?limit=30"\)/);
 assert.match(android,/Cada OS concluída gera um único lançamento auditável/);
 assert.match(android,/Quero ser entregador/);
-assert.match(android,/\/entregador#cadastro/);
+assert.match(android,/courierSignupDialog\(\)/);
+assert.match(android,/api\.signup\(/);
 assert.match(merchant,/bindCustomerLookup/);
 assert.match(merchant,/customerLookupSequence/);
 assert.ok(!merchant.includes('customerLookupController'),'consulta de cliente não pode depender de AbortController desconectado da requisição');
