@@ -25,7 +25,7 @@ alter table public.vuppi_delivery_tariffs enable row level security;
 revoke all on public.vuppi_delivery_tariffs from public,anon,authenticated;
 
 insert into public.vuppi_delivery_tariffs(city,name)
-select id,'Tarifa padrão · '||name from public.up_cidades
+select id,'Tarifa padrão · '||nome from public.up_cidades
 on conflict(city) where merchant is null do nothing;
 
 alter table public.vuppi_quotes add column if not exists pricing_snapshot jsonb not null default '{}'::jsonb;
@@ -155,3 +155,4 @@ revoke all on function public.vuppi_calculate_delivery_price(uuid,text,integer,b
 grant execute on function public.vuppi_create_quote(jsonb),public.vuppi_pricing_admin(text,jsonb) to authenticated;
 grant execute on function public.vuppi_delivery_details(uuid,jsonb) to authenticated;
 commit;
+
