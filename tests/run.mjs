@@ -17,3 +17,4 @@ await import('./admin-v65.test.mjs');
 
 await import('./pricing-routing-v67.test.mjs');
 await import('./panel-ux-v68.test.mjs');
+await import('./operational-robot-v69.test.mjs');

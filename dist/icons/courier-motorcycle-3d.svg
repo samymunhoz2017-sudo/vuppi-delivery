@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="badge" x1="8" y1="5" x2="56" y2="59" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9b45ff"/><stop offset=".55" stop-color="#6f20e8"/><stop offset="1" stop-color="#351067"/>
+    </linearGradient>
+    <linearGradient id="bike" x1="17" y1="22" x2="48" y2="45" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff"/><stop offset="1" stop-color="#cbb4ef"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dy="3" stdDeviation="2.5" flood-opacity=".35"/></filter>
+  </defs>
+  <ellipse cx="32" cy="57" rx="19" ry="4" fill="#10131b" opacity=".22"/>
+  <circle cx="32" cy="29" r="26" fill="url(#badge)" stroke="#fff" stroke-width="3" filter="url(#shadow)"/>
+  <circle cx="21" cy="41" r="7" fill="#1d1530" stroke="#fff" stroke-width="2.5"/>
+  <circle cx="46" cy="41" r="7" fill="#1d1530" stroke="#fff" stroke-width="2.5"/>
+  <path d="M21 41l8-15h10l7 15m-25 0h25M28 26l-4-5h-5m20 5 4-5h5M29 27l9 9H24" fill="none" stroke="url(#bike)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M27 22h13l-3 6h-13z" fill="#ffcf45" stroke="#fff" stroke-width="1.5"/>
+</svg>
