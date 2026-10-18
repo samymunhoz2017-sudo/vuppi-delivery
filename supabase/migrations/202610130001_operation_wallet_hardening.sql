@@ -127,7 +127,7 @@ begin
  select * into d from public.vuppi_deliveries where id=p_delivery for update;
  if d.id is null then raise exception 'UP_CAR: Entrega não encontrada.'; end if;
  if p_action='edit' then
-  if d.status not in ('requested','assigned') then raise exception 'UP_CAR: Uma OS em rota ou encerrada não pode ter valor alterado.'; end if;
+  if d.status not in ('requested','assigned','collected') then raise exception 'UP_CAR: Uma OS encerrada não pode ter valor alterado.'; end if;
   new_price:=greatest(800,least(1000000,coalesce(nullif(p_data->>'price_cents','')::integer,d.price_cents)));
   if d.payment_method='wallet' and new_price<>d.price_cents then
    mw:=public.vuppi_wallet_ensure('merchant',d.merchant,d.city,'delivery'); delta:=new_price-d.price_cents;
@@ -157,6 +157,9 @@ begin
    redistributed_count=redistributed_count+1,last_redistributed_at=now(),last_redistributed_by=actor,updated_at=now()
    where id=d.id returning * into d;
   if old_courier is not null then update public.vuppi_members set is_available=true,updated_at=now() where user_id=old_courier and approved; end if;
+ elsif p_action='record_issue' then
+  if length(trim(coalesce(p_data->>'reason','')))<3 then raise exception 'UP_CAR: Descreva a ocorrência.'; end if;
+  if coalesce(nullif(trim(p_data->>'issue_type'),''),'')='' then raise exception 'UP_CAR: Selecione a categoria da ocorrência.'; end if;
  elsif p_action='finalize' then
   if d.status not in ('assigned','collected') or d.courier is null then raise exception 'UP_CAR: A OS precisa ter um entregador antes da finalização.'; end if;
   update public.vuppi_deliveries set status='delivered',updated_at=now() where id=d.id returning * into d;

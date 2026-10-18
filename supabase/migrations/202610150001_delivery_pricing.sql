@@ -84,7 +84,7 @@ begin
  if p_action='state' then
   return jsonb_build_object(
    'tariffs',coalesce((select jsonb_agg(to_jsonb(x) order by city,merchant nulls first) from public.vuppi_delivery_tariffs x),'[]'::jsonb),
-   'cities',coalesce((select jsonb_agg(to_jsonb(c) order by c.name) from public.up_cidades c),'[]'::jsonb),
+   'cities',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'name',c.nome,'uf',c.uf,'active',c.ativa) order by c.nome) from public.up_cidades c),'[]'::jsonb),
    'merchants',coalesce((select jsonb_agg(jsonb_build_object('user_id',m.user_id,'name',m.name,'city',m.city) order by m.name) from public.vuppi_members m where m.kind='merchant' and m.approved),'[]'::jsonb)
   );
  end if;
