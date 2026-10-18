@@ -14,7 +14,7 @@ final class Api {
   JSONObject get(String path) throws Exception{return call("GET",path,null);}
   JSONObject post(String path,JSONObject body) throws Exception{return call("POST",path,body);}
   JSONObject action(String action,JSONObject data) throws Exception {JSONObject b=new JSONObject();b.put("action",action);b.put("data",data==null?new JSONObject():data);return post("/api/delivery/action",b);}
-  JSONObject login(String email,String password) throws Exception {JSONObject b=new JSONObject();b.put("email",email.trim());b.put("password",password);b.put("remember",true);JSONObject r=post("/api/auth/login",b);String session=r.optString("session");if(!session.isEmpty())store.save(session);return r;}
+  JSONObject login(String email,String password) throws Exception {JSONObject b=new JSONObject();b.put("email",email.trim().toLowerCase(java.util.Locale.ROOT));b.put("password",password);b.put("remember",true);JSONObject r=post("/api/auth/login",b);String session=r.optString("session");if(!session.isEmpty())store.save(session);return r;}
   JSONObject signup(String name,String email,String password) throws Exception {JSONObject b=new JSONObject();b.put("name",name.trim());b.put("email",email.trim());b.put("password",password);b.put("remember",true);JSONObject r=post("/api/auth/signup",b);String session=r.optString("session");if(!session.isEmpty())store.save(session);return r;}
   void logout(){try{post("/api/auth/logout",new JSONObject());}catch(Exception ignored){}store.clear();}
   boolean hasSession(){return !store.get().isEmpty();}

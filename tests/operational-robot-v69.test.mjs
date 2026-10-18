@@ -8,6 +8,7 @@ const html=read('dist/delivery.html');
 const admin=read('dist/admin.js');
 const activity=read('mobile/vuppi-entregador-android/app/src/main/java/br/com/vuppidelivery/entregador/MainActivity.java');
 const server=read('server/delivery.mjs');
+const worker=read('server/worker.mjs');
 
 // Robô de homologação: cadastro pendente não pode iniciar a operação.
 let profile={kind:'courier',approved:false,member_status:'pending'},calls=[];
@@ -44,6 +45,8 @@ assert.equal(calls.some(call=>call.path?.includes('vuppi_driver_location')),fals
 // Contratos visuais e operacionais das três interfaces.
 for(const invariant of ['id="accessGate"','id="courierHome"','id="merchantHome"'])assert.ok(html.includes(invariant));
 for(const invariant of ['memberAccess','renderAccessGate','Seu cadastro está em análise','courierLocationWatch=null','todayStart.setHours(0,0,0,0)','courier-motorcycle-3d.svg','courier-settings-hero'])assert.ok(delivery.includes(invariant),`interface sem ${invariant}`);
+assert.match(delivery,/catch\(error\)\{showLoginRequired/,'falha de login precisa liberar o formulário para nova tentativa');
+assert.match(worker,/email:data\.email\.trim\(\)\.toLowerCase\(\)/,'login precisa normalizar o e-mail');
 for(const invariant of ['courierMapIcon','courier-motorcycle-3d.svg','liveCourierMarkers'])assert.ok(admin.includes(invariant),`mapa administrativo sem ${invariant}`);
 for(const invariant of ['hasOperationalAccess','showAccessGate','Verificar liberação','stopService(new Intent(this,CourierService.class))','api.get("/api/delivery/state")'])assert.ok(activity.includes(invariant),`Android sem ${invariant}`);
 assert.match(server,/courierActions/);
