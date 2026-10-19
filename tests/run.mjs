@@ -11,6 +11,7 @@ await import('./android-native-ui.test.mjs');
 await import('./delivery-api.test.mjs');
 await import('./financial.test.mjs');
 await import('./wallet-billing.test.mjs');
+await import('./mercadopago-wallet.test.mjs');
 await import('./stabilization-v60.test.mjs');
 await import('./admin-p0.test.mjs');
 await import('./admin-v65.test.mjs');
