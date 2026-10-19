@@ -5,6 +5,7 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const admin=read('dist/admin.js');
 const pricing=read('supabase/migrations/202610180001_fix_pricing_admin.sql');
 const incidents=read('supabase/migrations/202610180002_os_incidents.sql');
+const dispatchCompat=read('supabase/migrations/202610180003_delivery_dispatch_compat.sql');
 
 assert.match(pricing,/c\.nome/);
 assert.match(pricing,/jsonb_build_object\('id',c\.id,'name',c\.nome/);
@@ -19,5 +20,7 @@ assert.match(admin,/Tarifas cadastradas/);
 assert.match(admin,/pricing-list[\s\S]*\$\{cards\}/);
 assert.match(incidents,/record_issue/);
 assert.match(incidents,/requested','assigned','collected/);
+assert.match(dispatchCompat,/add column if not exists dispatch_at timestamptz/);
+assert.match(dispatchCompat,/set dispatch_at=coalesce\(scheduled_for,created_at\)/);
 
 console.log('V71: precificação, lista de tarifas e gestão auditada de ocorrências de OS verificadas.');
