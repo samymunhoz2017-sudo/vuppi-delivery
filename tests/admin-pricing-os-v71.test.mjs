@@ -8,6 +8,9 @@ const incidents=read('supabase/migrations/202610180002_os_incidents.sql');
 
 assert.match(pricing,/c\.nome/);
 assert.match(pricing,/jsonb_build_object\('id',c\.id,'name',c\.nome/);
+assert.match(pricing,/steps:=ceil/);
+assert.match(pricing,/tariff_version','prévia'/);
+assert.doesNotMatch(pricing,/return public\.vuppi_calculate_delivery_price\(merchant_id/);
 assert.match(admin,/Alteração e ocorrências de OS/);
 assert.match(admin,/Analisar e corrigir/);
 assert.match(admin,/operation:'record_issue'/);

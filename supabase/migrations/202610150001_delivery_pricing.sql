@@ -78,7 +78,7 @@ end;$$;
 
 create or replace function public.vuppi_pricing_admin(p_action text,p_data jsonb default '{}'::jsonb) returns jsonb
 language plpgsql security definer set search_path=public,pg_temp as $$
-declare t public.vuppi_delivery_tariffs;merchant_id uuid;city_id text;distance_value integer;result jsonb;
+declare t public.vuppi_delivery_tariffs;merchant_id uuid;city_id text;distance_value integer;result jsonb;steps integer;subtotal integer;total integer;
 begin
  if not public.up_platform_is_admin() then raise exception 'UP_CAR: Acesso exclusivo do administrador.'; end if;
  if p_action='state' then
@@ -91,9 +91,12 @@ begin
  city_id:=nullif(trim(p_data->>'city'),'');merchant_id:=nullif(p_data->>'merchant','')::uuid;
  if p_action='test' then
   distance_value:=round(coalesce((p_data->>'distance_m')::numeric,0))::integer;
-  if merchant_id is null then select user_id into merchant_id from public.vuppi_members where kind='merchant' and approved and city=city_id order by created_at limit 1; end if;
-  if merchant_id is null then raise exception 'VUPPI_PRICE: Selecione um estabelecimento aprovado para simular.'; end if;
-  return public.vuppi_calculate_delivery_price(merchant_id,city_id,distance_value,coalesce((p_data->>'return_required')::boolean,false));
+  if distance_value<=0 then raise exception 'VUPPI_PRICE: Informe uma distância válida.'; end if;
+  if (p_data->>'additional_step_m')::integer<=0 or (p_data->>'maximum_distance_m')::integer<distance_value then raise exception 'VUPPI_PRICE: Revise o incremento e a distância máxima.'; end if;
+  steps:=ceil(greatest(0,distance_value-(p_data->>'base_distance_m')::integer)::numeric/(p_data->>'additional_step_m')::integer)::integer;
+  subtotal:=greatest((p_data->>'minimum_cents')::integer,(p_data->>'base_cents')::integer+steps*(p_data->>'additional_step_cents')::integer);
+  total:=subtotal+case when coalesce((p_data->>'return_required')::boolean,false) then (p_data->>'return_cents')::integer else 0 end;
+  return jsonb_build_object('price_cents',total,'subtotal_cents',subtotal,'return_cents',case when coalesce((p_data->>'return_required')::boolean,false) then (p_data->>'return_cents')::integer else 0 end,'distance_m',distance_value,'return_required',coalesce((p_data->>'return_required')::boolean,false),'tariff_name',coalesce(nullif(trim(p_data->>'name'),''),'Simulação'),'tariff_version','prévia','scope',case when merchant_id is null then 'city' else 'merchant' end);
  end if;
  if p_action='save' then
   if city_id is null then raise exception 'VUPPI_PRICE: Selecione a cidade.'; end if;
