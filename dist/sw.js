@@ -1,5 +1,5 @@
 // Nunca armazena respostas de autenticação, pedidos, localização ou mapas.
-const CACHE='vuppi-offline-v51';
+const CACHE='vuppi-offline-v70';
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.add('/offline.html')))});
 self.addEventListener('activate',e=>{e.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('vuppi-offline-')&&k!==CACHE).map(k=>caches.delete(k))))]))});
 self.addEventListener('fetch',e=>{if(e.request.mode==='navigate'&&new URL(e.request.url).origin===self.location.origin)e.respondWith(fetch(e.request).catch(()=>caches.match('/offline.html')))});

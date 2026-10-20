@@ -53,13 +53,12 @@ export class MercadoPagoPaymentProvider{
  constructor(env={},fetcher=fetch){this.name='mercadopago';this.enabled=env.MERCADOPAGO_ENABLED==='true';this.live=env.MERCADOPAGO_LIVE_MODE==='true';this.accessToken=env.MERCADOPAGO_ACCESS_TOKEN||'';this.origin=String(env.UP_PUBLIC_ORIGIN||'https://vuppidelivery.com.br').replace(/\/$/,'');this.fetcher=fetcher}
  assertReady(){if(!this.enabled)throw Error('Mercado Pago ainda não foi ativado.');if(!this.accessToken)throw Error('Credencial do Mercado Pago não configurada.')}
  headers(idempotencyKey=''){return {Authorization:'Bearer '+this.accessToken,'Content-Type':'application/json',...(idempotencyKey?{'X-Idempotency-Key':idempotencyKey}:{})}}
- async createCheckoutPreference(input){
+ async createPixPayment(input){
   this.assertReady();const reference=String(input.externalReference||'');if(!/^[0-9a-f-]{36}$/i.test(reference))throw Error('Referência da recarga inválida.');
-  const returnBase=this.origin+'/estabelecimento?payment=';
-  const body={items:[{id:reference,title:'Créditos Vuppi Delivery',description:'Recarga da carteira de créditos',currency_id:'BRL',quantity:1,unit_price:Number(input.value)}],external_reference:reference,payer:{email:String(input.email||'')},notification_url:this.origin+'/api/finance/mercadopago/webhook',back_urls:{success:returnBase+'success',pending:returnBase+'pending',failure:returnBase+'failure'},auto_return:'approved',statement_descriptor:'VUPPI DELIVERY',metadata:{topup_id:reference}};
-  const data=await providerJson(this.fetcher,'https://api.mercadopago.com/checkout/preferences',{method:'POST',headers:this.headers(reference),body:JSON.stringify(body)},'Não foi possível criar o pagamento no Mercado Pago.');
-  const checkoutUrl=this.live?data.init_point:data.sandbox_init_point||data.init_point;if(!data.id||!checkoutUrl)throw Error('Mercado Pago não devolveu o link de pagamento.');
-  return {provider:this.name,reference:String(data.id),status:'pending',checkout_url:String(checkoutUrl),live_mode:this.live};
+  const body={transaction_amount:Number(input.value),description:'Recarga da carteira Vuppi Delivery',payment_method_id:'pix',external_reference:reference,notification_url:this.origin+'/api/finance/mercadopago/webhook',payer:{email:String(input.email||'')},metadata:{topup_id:reference}};
+  const data=await providerJson(this.fetcher,'https://api.mercadopago.com/v1/payments',{method:'POST',headers:this.headers(reference),body:JSON.stringify(body)},'Não foi possível gerar o Pix no Mercado Pago.');
+  const pix=data.point_of_interaction?.transaction_data||{};if(!data.id||!pix.qr_code||!pix.qr_code_base64)throw Error('Mercado Pago não devolveu o QR Code Pix.');
+  return {provider:this.name,reference:String(data.id),status:String(data.status||'pending'),payment_method:'pix',qr_code:String(pix.qr_code),qr_code_base64:String(pix.qr_code_base64),ticket_url:String(pix.ticket_url||''),expires_at:data.date_of_expiration||null,live_mode:data.live_mode===true};
  }
  async getPayment(id){this.assertReady();if(!/^\d{1,32}$/.test(String(id)))throw Error('Pagamento do Mercado Pago inválido.');return providerJson(this.fetcher,'https://api.mercadopago.com/v1/payments/'+id,{headers:this.headers()},'Não foi possível consultar o pagamento no Mercado Pago.')}
 }
@@ -104,7 +103,9 @@ export async function handleFinancial(request,c){
  const billingRpc=(action,data={})=>c.upstream('/rest/v1/rpc/vuppi_wallet_billing',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});
  const reply=async data=>{await c.renewCookie();return c.json(data)};
  if(path==='/api/finance/state'&&request.method==='GET'){
-  const state=await rpc('state');try{state.billing=await billingRpc('state',{city:url.searchParams.get('city')||''});state.billing.ready=true}catch(error){state.billing={ready:false,message:error.message}}return reply(state);
+  const state=await rpc('state'),provider=c.paymentProvider(),webhookUrl=String(c.env.UP_PUBLIC_ORIGIN||'https://vuppidelivery.com.br').replace(/\/$/,'')+'/api/finance/mercadopago/webhook';
+  state.provider=provider.name==='mercadopago'?{name:'mercadopago',label:'Mercado Pago',enabled:provider.enabled===true,live_operations:provider.live===true,mode:provider.live?'production':'test',credential_configured:Boolean(provider.accessToken),webhook_configured:Boolean(c.env.MERCADOPAGO_WEBHOOK_SECRET),webhook_url:webhookUrl,payment_method:'pix',automatic_settlement:true}:{name:provider.name,enabled:false,live_operations:false,payment_method:'pix'};
+  try{state.billing=await billingRpc('state',{city:url.searchParams.get('city')||''});state.billing.ready=true}catch(error){state.billing={ready:false,message:error.message}}return reply(state);
  }
  if(path==='/api/finance/statement'&&request.method==='GET')return reply(await rpc('statement',{wallet_id:url.searchParams.get('wallet_id'),limit:Math.min(200,Math.max(1,Number(url.searchParams.get('limit')||50)))}));
  if(path==='/api/finance/summary'&&request.method==='GET'){
@@ -121,9 +122,9 @@ export async function handleFinancial(request,c){
   if(action==='topup_request'){
    const created=await rpc(action,data),provider=c.paymentProvider();
    if(provider.name==='mercadopago'){
-    const charge=await provider.createCheckoutPreference({externalReference:created.id,value:Number(created.total_cents)/100,email:user.email});
-    await serviceRpc(c.env,c.fetcher,'vuppi_mercadopago_link',{p_topup:created.id,p_preference_id:charge.reference,p_checkout_url:charge.checkout_url,p_live_mode:charge.live_mode});
-    return reply({...created,provider:charge,checkout_url:charge.checkout_url,simulation:false});
+    const charge=await provider.createPixPayment({externalReference:created.id,value:Number(created.total_cents)/100,email:user.email});
+    await serviceRpc(c.env,c.fetcher,'vuppi_mercadopago_link',{p_topup:created.id,p_preference_id:charge.reference,p_checkout_url:charge.ticket_url||'https://www.mercadopago.com.br',p_live_mode:charge.live_mode});
+    return reply({...created,provider:charge,qr_code:charge.qr_code,qr_code_base64:charge.qr_code_base64,ticket_url:charge.ticket_url,expires_at:charge.expires_at,simulation:false});
    }
    const charge=await provider.createPixCharge({externalReference:created.id,value:Number(created.total_cents)/100,description:'Créditos Vuppi Delivery'});
    if(provider.name==='fake')return reply({...created,provider:charge,simulation:true});
