@@ -25,6 +25,11 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/state'&&request.method==='GET'){
   const state=await c.upstream('/rest/v1/rpc/vuppi_delivery_state',{method:'POST',token:s.access,body:{},carErrors:true});
+  if(state?.profile?.kind==='courier'){
+   const rules=await c.upstream('/rest/v1/rpc/vuppi_courier_financial_rules',{method:'POST',token:s.access,body:{},carErrors:true}),share=Math.max(0,Math.min(10000,Number(rules?.courier_share_bps??8500)));
+   const net=row=>{const copy={...row},gross=Math.max(0,Number(row?.price_cents||0));copy.price_cents=Math.floor(gross*share/10000);copy.courier_price_cents=copy.price_cents;delete copy.merchant_price_cents;delete copy.platform_fee_cents;return copy};
+   state.orders=(state.orders||[]).map(net);state.offers=(state.offers||[]).map(net);state.financial_rules={courier_share_bps:share};
+  }
   if(state?.admin&&c.env.SUPABASE_SECRET_KEY){
    try{
     const response=await c.fetcher(c.env.SUPABASE_URL+'/auth/v1/admin/users?page=1&per_page=100',{headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY},signal:AbortSignal.timeout(10000)}),body=response.ok?await response.json():{},existing=new Set((state.members||[]).map(x=>x.user_id));
@@ -33,7 +38,10 @@ export async function handleDelivery(request,c){
   }
   return reply(state);
  }
- if(path==='/api/delivery/pending'&&request.method==='GET')return reply(await c.upstream('/rest/v1/rpc/vuppi_courier_pending_state',{method:'POST',token:s.access,body:{},carErrors:true}));
+ if(path==='/api/delivery/pending'&&request.method==='GET'){
+  const pending=await c.upstream('/rest/v1/rpc/vuppi_courier_pending_state',{method:'POST',token:s.access,body:{},carErrors:true}),rules=await c.upstream('/rest/v1/rpc/vuppi_courier_financial_rules',{method:'POST',token:s.access,body:{},carErrors:true}),share=Math.max(0,Math.min(10000,Number(rules?.courier_share_bps??8500))),net=row=>({...row,price_cents:Math.floor(Math.max(0,Number(row?.price_cents||0))*share/10000),courier_price_cents:Math.floor(Math.max(0,Number(row?.price_cents||0))*share/10000)});
+  pending.available=(pending.available||[]).map(net);pending.decisions=(pending.decisions||[]).map(net);return reply(pending);
+ }
  if(path==='/api/delivery/customer'&&request.method==='GET'){
   const phone=String(new URL(request.url).searchParams.get('phone')||'').replace(/\D/g,'');
   if(phone.length<10)return reply({found:false});

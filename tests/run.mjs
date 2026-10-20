@@ -20,3 +20,4 @@ await import('./pricing-routing-v67.test.mjs');
 await import('./panel-ux-v68.test.mjs');
 await import('./operational-robot-v69.test.mjs');
 await import('./admin-pricing-os-v71.test.mjs');
+await import('./financial-rules-v72.test.mjs');
