@@ -11,7 +11,7 @@ const activity=readFileSync(new URL('../mobile/vuppi-entregador-android/app/src/
 for(const invariant of ['vuppi_courier_messages','vuppi_courier_message_reads','target_kind','priority','enable row level security'])assert.ok(migration.includes(invariant),`Central de mensagens sem ${invariant}`);
 for(const action of ['message_create','message_read','message_archive'])assert.ok(server.includes(action),`Contrato ausente: ${action}`);
 assert.ok(server.includes("path==='/api/delivery/messages'"));
-assert.ok(admin.includes('communicationsView')&&admin.includes('Novo comunicado')&&admin.includes('Todos os entregadores'));
+assert.ok(admin.includes('communicationsView')&&admin.includes('Nova notificação do aplicativo')&&admin.includes('Todos os entregadores'));
 assert.ok(courier.includes('loadCourierMessages')&&courier.includes('central-message-splash'));
 assert.ok(service.includes('pollCentralMessages')&&service.includes('CHANNEL_MESSAGES'));
 assert.ok(activity.includes('centralMessagesDialog')&&activity.includes('Mensagens da central'));

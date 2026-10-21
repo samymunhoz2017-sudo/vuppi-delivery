@@ -17,14 +17,14 @@ import org.json.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CourierService extends Service {
-  static final String ACTION_START="br.com.vuppi.START", ACTION_STOP="br.com.vuppi.STOP", ACTION_APP_FOREGROUND="br.com.vuppi.APP_FOREGROUND", ACTION_APP_BACKGROUND="br.com.vuppi.APP_BACKGROUND", ACTION_STOP_OFFER_ALERT="br.com.vuppi.STOP_OFFER_ALERT", ACTION_REJECT_OFFER="br.com.vuppi.REJECT_OFFER", ACTION_OFFER_CHANGED="br.com.vuppi.OFFER_CHANGED", EXTRA_ACTIVE="active", EXTRA_OFFER_ID="offerId";
+  static final String ACTION_START="br.com.vuppi.START", ACTION_STOP="br.com.vuppi.STOP", ACTION_APP_FOREGROUND="br.com.vuppi.APP_FOREGROUND", ACTION_APP_BACKGROUND="br.com.vuppi.APP_BACKGROUND", ACTION_STOP_OFFER_ALERT="br.com.vuppi.STOP_OFFER_ALERT", ACTION_REJECT_OFFER="br.com.vuppi.REJECT_OFFER", ACTION_OFFER_CHANGED="br.com.vuppi.OFFER_CHANGED", EXTRA_ACTIVE="active", EXTRA_AVAILABLE="available", EXTRA_OFFER_ID="offerId";
   private static final String CHANNEL_TRACK="vuppi_tracking_v59", CHANNEL_OFFERS="vuppi_offers_v59", CHANNEL_MESSAGES="vuppi_messages_v73", PREF_OVERLAY="vuppi.overlay", PREF_MESSAGES="vuppi.messages";
   private final Handler main=new Handler(Looper.getMainLooper());
   private final AtomicBoolean checking=new AtomicBoolean(false);
   private FusedLocationProviderClient location; private LocationCallback callback; private Api api;
   private static volatile boolean processForeground;
   private static volatile CourierService running;
-  private volatile boolean active,updatesStarted; private volatile Location lastLocation; private volatile long nextRejectFlushAt,nextMessagePollAt;
+  private volatile boolean active,available,updatesStarted; private volatile Location lastLocation; private volatile long nextRejectFlushAt,nextMessagePollAt;
   private WindowManager windows; private View floatingIcon,offerOverlay; private TextView badge; private String overlayOfferId="";
   private MediaPlayer offerPlayer; private int offerPlays; private AudioManager audioManager; private AudioFocusRequest audioFocusRequest;
   private OfferStateMachine offerState; private OfferDecisionStore decisions;
@@ -38,8 +38,8 @@ public class CourierService extends Service {
     if(ACTION_APP_BACKGROUND.equals(action)){processForeground=false;return START_STICKY;}
     if(ACTION_STOP_OFFER_ALERT.equals(action)){stopOfferAlert();return START_STICKY;}
     if(ACTION_REJECT_OFFER.equals(action)){rejectOffer(intent.getStringExtra(EXTRA_OFFER_ID));return START_STICKY;}
-    active=intent!=null&&intent.getBooleanExtra(EXTRA_ACTIVE,false);
-    startForeground(41,trackingNotification());startPolling();startLocationUpdatesIfAllowed();showFloatingIcon(false);return START_STICKY;
+    active=intent!=null&&intent.getBooleanExtra(EXTRA_ACTIVE,false);available=intent!=null&&intent.getBooleanExtra(EXTRA_AVAILABLE,false);
+    startForeground(41,trackingNotification());startPolling();if(active||available)startLocationUpdatesIfAllowed();else stopLocationUpdates();showFloatingIcon(false);return START_STICKY;
   }
   private void startPolling(){main.removeCallbacks(offerPoll);main.post(offerPoll);}
   private void startLocationUpdatesIfAllowed(){
@@ -51,11 +51,12 @@ public class CourierService extends Service {
   private void tick(Location p){
     if(!checking.compareAndSet(false,true))return;
     try{
-      if(!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);
-      JSONObject state=api.get("/api/delivery/state");JSONArray offers=state.optJSONArray("offers");JSONObject offer=firstEligibleOffer(offers);String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
+      if((active||available)&&!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);
+      JSONObject state=api.get("/api/delivery/state");JSONObject profile=state.optJSONObject("profile");available=profile!=null&&profile.optBoolean("is_available");JSONArray offers=state.optJSONArray("offers");JSONObject offer=(active||available)?firstEligibleOffer(offers):null;String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
       main.post(()->presentOffer(offer,observation));flushPendingRejections();pollCentralMessages();
     }catch(Exception ignored){}finally{checking.set(false);}
   }
+  private void stopLocationUpdates(){if(callback!=null)try{location.removeLocationUpdates(callback);}catch(Exception ignored){}callback=null;updatesStarted=false;lastLocation=null;}
   private JSONObject firstEligibleOffer(JSONArray offers){
     if(offers==null)return null;
     long now=System.currentTimeMillis();
@@ -95,7 +96,7 @@ public class CourierService extends Service {
     NotificationChannel messages=new NotificationChannel(CHANNEL_MESSAGES,"Mensagens da central",NotificationManager.IMPORTANCE_HIGH);messages.setDescription("Comunicados operacionais enviados pela central VUPPI");messages.enableVibration(true);messages.setVibrationPattern(new long[]{0,180,120,180});n.createNotificationChannel(messages);
   }
   private Notification.Builder notificationBuilder(String channel){return Build.VERSION.SDK_INT>=26?new Notification.Builder(this,channel):new Notification.Builder(this);}
-  private Notification trackingNotification(){PendingIntent pi=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);return notificationBuilder(CHANNEL_TRACK).setSmallIcon(R.drawable.app_icon).setContentTitle(active?"Entrega VUPPI em andamento":"VUPPI: você está livre").setContentText(active?"Acompanhando sua rota em segundo plano.":"Buscando entregas na sua região.").setContentIntent(pi).setOngoing(true).build();}
+  private Notification trackingNotification(){PendingIntent pi=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);String title=active?"Entrega VUPPI em andamento":available?"VUPPI: você está livre":"VUPPI conectada à central",body=active?"Acompanhando sua rota em segundo plano.":available?"Buscando entregas na sua região.":"Você receberá comunicados da matriz neste aparelho.";return notificationBuilder(CHANNEL_TRACK).setSmallIcon(R.drawable.app_icon).setContentTitle(title).setContentText(body).setContentIntent(pi).setOngoing(true).build();}
   private void notifyOffer(JSONObject offer){Intent open=new Intent(this,MainActivity.class).putExtra("offerId",offer.optString("id")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);PendingIntent pi=PendingIntent.getActivity(this,2,open,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);Notification n=notificationBuilder(CHANNEL_OFFERS).setSmallIcon(R.drawable.app_icon).setContentTitle("Nova entrega disponível").setContentText("Abra a VUPPI para consultar e responder à oferta.").setPriority(Notification.PRIORITY_MAX).setCategory(Notification.CATEGORY_EVENT).setVisibility(Notification.VISIBILITY_PRIVATE).setAutoCancel(true).setContentIntent(pi).build();getSystemService(NotificationManager.class).notify(99,n);}
   private void playOfferAlert(){
     stopOfferAlert();offerPlays=0;
@@ -134,7 +135,7 @@ public class CourierService extends Service {
   private GradientDrawable round(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
   private android.graphics.drawable.Drawable circleLogo(){Bitmap src=BitmapFactory.decodeResource(getResources(),R.drawable.app_icon);int size=Math.min(src.getWidth(),src.getHeight());Bitmap out=Bitmap.createBitmap(size,size,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(out);Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);BitmapShader shader=new BitmapShader(src,Shader.TileMode.CLAMP,Shader.TileMode.CLAMP);float scale=(float)size/Math.min(src.getWidth(),src.getHeight());android.graphics.Matrix matrix=new android.graphics.Matrix();matrix.setScale(scale,scale);shader.setLocalMatrix(matrix);paint.setShader(shader);canvas.drawCircle(size/2f,size/2f,size/2f,paint);return new android.graphics.drawable.BitmapDrawable(getResources(),out);}
   private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
-  @Override public void onDestroy(){main.removeCallbacksAndMessages(null);clearOfferPresentation();if(callback!=null)location.removeLocationUpdates(callback);updatesStarted=false;removeOverlays();if(running==this)running=null;super.onDestroy();}
+  @Override public void onDestroy(){main.removeCallbacksAndMessages(null);clearOfferPresentation();stopLocationUpdates();removeOverlays();if(running==this)running=null;super.onDestroy();}
   @Override public android.os.IBinder onBind(Intent i){return null;}
 }
 

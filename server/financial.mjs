@@ -116,9 +116,10 @@ export async function handleFinancial(request,c){
  if(path==='/api/finance/action'&&request.method==='POST'){
   const input=await c.readJson(request),action=String(input.action||''),data=input.data||{};
   const billingActions=['billing_profile_create','billing_run_preview','billing_run_execute','billing_exemption_create','billing_exemption_revoke','billing_exemption_mass_preview','billing_exemption_mass_apply','billing_withdrawal_approve','billing_settings_save'];
-  if(!['topup_quote','topup_request','withdraw_request','admin_adjust','admin_confirm_topup','admin_process_withdrawal','settings_save','benefit_create','reconcile',...billingActions].includes(action))return c.json({message:'Ação financeira inválida.'},400);
+  if(!['topup_quote','topup_request','withdraw_request','withdrawal_review','admin_adjust','admin_confirm_topup','admin_process_withdrawal','settings_save','benefit_create','reconcile',...billingActions].includes(action))return c.json({message:'Ação financeira inválida.'},400);
   if(action==='admin_adjust')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_wallet_adjust',{method:'POST',token:s.access,body:{p_wallet:data.wallet_id,p_direction:data.direction,p_amount_cents:Number(data.amount_cents),p_reason:data.reason,p_idempotency_key:data.idempotency_key},carErrors:true}));
   if(action==='settings_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_finance_settings_admin',{method:'POST',token:s.access,body:{p_data:data},carErrors:true}));
+  if(action==='withdrawal_review')return reply(await c.upstream('/rest/v1/rpc/vuppi_withdrawal_review',{method:'POST',token:s.access,body:{p_id:data.id,p_reason:data.reason},carErrors:true}));
   if(billingActions.includes(action))return reply(await billingRpc(action.replace('billing_',''),data));
   if(action==='topup_request'){
    const created=await rpc(action,data),provider=c.paymentProvider();

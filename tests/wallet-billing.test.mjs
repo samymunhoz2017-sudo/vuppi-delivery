@@ -16,7 +16,7 @@ assert.match(sql,/revoke all on public\.vuppi_finance_permissions[\s\S]+from ano
 assert.match(sql,/if not p_dry_run and not cfg\.merchant_monthly_billing then raise exception/i);
 assert.ok(admin.includes('billing_run_preview'));
 assert.ok(admin.includes('billing_exemption_mass_apply'));
-assert.ok(admin.includes('billing_withdrawal_approve'));
+assert.ok(admin.includes('withdrawal_review'));
 assert.ok(admin.includes('free_period_days'));
 assert.ok(merchant.includes('Mensalidades pendentes'));
 assert.ok(merchant.includes('subscriptionDebt'));
