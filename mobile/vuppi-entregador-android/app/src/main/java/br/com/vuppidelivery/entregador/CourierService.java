@@ -18,13 +18,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CourierService extends Service {
   static final String ACTION_START="br.com.vuppi.START", ACTION_STOP="br.com.vuppi.STOP", ACTION_APP_FOREGROUND="br.com.vuppi.APP_FOREGROUND", ACTION_APP_BACKGROUND="br.com.vuppi.APP_BACKGROUND", ACTION_STOP_OFFER_ALERT="br.com.vuppi.STOP_OFFER_ALERT", ACTION_REJECT_OFFER="br.com.vuppi.REJECT_OFFER", ACTION_OFFER_CHANGED="br.com.vuppi.OFFER_CHANGED", EXTRA_ACTIVE="active", EXTRA_OFFER_ID="offerId";
-  private static final String CHANNEL_TRACK="vuppi_tracking_v59", CHANNEL_OFFERS="vuppi_offers_v59", PREF_OVERLAY="vuppi.overlay";
+  private static final String CHANNEL_TRACK="vuppi_tracking_v59", CHANNEL_OFFERS="vuppi_offers_v59", CHANNEL_MESSAGES="vuppi_messages_v73", PREF_OVERLAY="vuppi.overlay", PREF_MESSAGES="vuppi.messages";
   private final Handler main=new Handler(Looper.getMainLooper());
   private final AtomicBoolean checking=new AtomicBoolean(false);
   private FusedLocationProviderClient location; private LocationCallback callback; private Api api;
   private static volatile boolean processForeground;
   private static volatile CourierService running;
-  private volatile boolean active,updatesStarted; private volatile Location lastLocation; private volatile long nextRejectFlushAt;
+  private volatile boolean active,updatesStarted; private volatile Location lastLocation; private volatile long nextRejectFlushAt,nextMessagePollAt;
   private WindowManager windows; private View floatingIcon,offerOverlay; private TextView badge; private String overlayOfferId="";
   private MediaPlayer offerPlayer; private int offerPlays; private AudioManager audioManager; private AudioFocusRequest audioFocusRequest;
   private OfferStateMachine offerState; private OfferDecisionStore decisions;
@@ -53,7 +53,7 @@ public class CourierService extends Service {
     try{
       if(!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);
       JSONObject state=api.get("/api/delivery/state");JSONArray offers=state.optJSONArray("offers");JSONObject offer=firstEligibleOffer(offers);String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
-      main.post(()->presentOffer(offer,observation));flushPendingRejections();
+      main.post(()->presentOffer(offer,observation));flushPendingRejections();pollCentralMessages();
     }catch(Exception ignored){}finally{checking.set(false);}
   }
   private JSONObject firstEligibleOffer(JSONArray offers){
@@ -86,10 +86,13 @@ public class CourierService extends Service {
   private void announceOfferChange(){sendBroadcast(new Intent(ACTION_OFFER_CHANGED).setPackage(getPackageName()));}
   private void cancelOfferNotification(){getSystemService(NotificationManager.class).cancel(99);}
   private void clearOfferPresentation(){removeOfferOverlay();stopOfferAlert();cancelOfferNotification();}
+  private void pollCentralMessages(){long now=System.currentTimeMillis();if(now<nextMessagePollAt)return;nextMessagePollAt=now+15000;try{JSONObject result=api.get("/api/delivery/messages");JSONArray rows=result.optJSONArray("messages");if(rows==null)return;for(int i=0;i<rows.length();i++){JSONObject row=rows.optJSONObject(i);if(row==null||!row.isNull("read_at"))continue;String id=row.optString("id");if(id.isEmpty()||getSharedPreferences(PREF_MESSAGES,0).getBoolean("seen_"+id,false))continue;getSharedPreferences(PREF_MESSAGES,0).edit().putBoolean("seen_"+id,true).apply();main.post(()->notifyCentralMessage(row));break;}}catch(Exception ignored){}}
+  private void notifyCentralMessage(JSONObject row){Intent open=new Intent(this,MainActivity.class).putExtra("centralMessage",true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);PendingIntent pi=PendingIntent.getActivity(this,103,open,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);String priority=row.optString("priority","normal");Notification n=notificationBuilder(CHANNEL_MESSAGES).setSmallIcon(R.drawable.app_icon).setContentTitle(row.optString("title","Mensagem da central")).setContentText(row.optString("body","Abra a VUPPI para ler.")).setStyle(new Notification.BigTextStyle().bigText(row.optString("body",""))).setPriority("urgent".equals(priority)?Notification.PRIORITY_MAX:Notification.PRIORITY_HIGH).setCategory(Notification.CATEGORY_MESSAGE).setVisibility(Notification.VISIBILITY_PRIVATE).setAutoCancel(true).setContentIntent(pi).build();getSystemService(NotificationManager.class).notify(103,n);}
   private void channels(){
     if(Build.VERSION.SDK_INT<26)return;
     NotificationManager n=getSystemService(NotificationManager.class);NotificationChannel tracking=new NotificationChannel(CHANNEL_TRACK,"VUPPI em segundo plano",NotificationManager.IMPORTANCE_LOW);tracking.setSound(null,null);n.createNotificationChannel(tracking);
     NotificationChannel offers=new NotificationChannel(CHANNEL_OFFERS,"Novas entregas",NotificationManager.IMPORTANCE_HIGH);offers.setDescription("Aviso curto quando uma nova entrega estiver disponível");offers.enableVibration(true);offers.setVibrationPattern(new long[]{0,220,120,320});offers.enableLights(true);offers.setLightColor(Color.rgb(118,33,232));offers.setSound(null,null);n.createNotificationChannel(offers);
+    NotificationChannel messages=new NotificationChannel(CHANNEL_MESSAGES,"Mensagens da central",NotificationManager.IMPORTANCE_HIGH);messages.setDescription("Comunicados operacionais enviados pela central VUPPI");messages.enableVibration(true);messages.setVibrationPattern(new long[]{0,180,120,180});n.createNotificationChannel(messages);
   }
   private Notification.Builder notificationBuilder(String channel){return Build.VERSION.SDK_INT>=26?new Notification.Builder(this,channel):new Notification.Builder(this);}
   private Notification trackingNotification(){PendingIntent pi=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);return notificationBuilder(CHANNEL_TRACK).setSmallIcon(R.drawable.app_icon).setContentTitle(active?"Entrega VUPPI em andamento":"VUPPI: você está livre").setContentText(active?"Acompanhando sua rota em segundo plano.":"Buscando entregas na sua região.").setContentIntent(pi).setOngoing(true).build();}

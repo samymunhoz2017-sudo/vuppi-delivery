@@ -4,6 +4,8 @@ export async function handleDelivery(request,c){
  const {s,user}=await c.session(),path=new URL(request.url).pathname;
  const rpc=async(action,data={})=>c.upstream('/rest/v1/rpc/vuppi_delivery',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});
  const reply=async data=>{await c.renewCookie();return c.json(data)};
+ const serviceHeaders=()=>({apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json'});
+ const serviceJson=async(url,options={})=>{const response=await c.fetcher(url,{...options,headers:{...serviceHeaders(),...(options.headers||{})},signal:AbortSignal.timeout(10000)}),text=await response.text(),body=text?JSON.parse(text):null;if(!response.ok)throw Error(body?.message||body?.error||'Falha ao consultar a central de mensagens.');return body};
  const geocode=async address=>{
   const query=String(address||'').trim();if(query.length<5||!/(?:^|\D)\d{1,6}(?:\D|$)/.test(query))throw Error('Informe um endereço completo, com rua e número.');
   if(!c.env.GOOGLE_MAPS_SERVER_KEY)throw Error('O Google Maps ainda aguarda a chave segura do servidor.');
@@ -22,6 +24,21 @@ export async function handleDelivery(request,c){
   const url='https://maps.googleapis.com/maps/api/geocode/json?region=br&language=pt-BR&address='+encodeURIComponent(query+', Pitangueiras, SP, Brasil')+'&key='+encodeURIComponent(c.env.GOOGLE_MAPS_SERVER_KEY),response=await c.fetcher(url,{signal:AbortSignal.timeout(10000)});
   if(!response.ok)return c.json({message:'A busca de endereços está temporariamente indisponível.'},503);
   const body=await response.json(),rows=body.results||[];return reply({results:rows.slice(0,6).map(x=>({label:x.formatted_address,lat:Number(x.geometry?.location?.lat),lng:Number(x.geometry?.location?.lng)})).filter(x=>x.label&&Number.isFinite(x.lat)&&Number.isFinite(x.lng))});
+ }
+ if(path==='/api/delivery/messages'&&request.method==='GET'){
+  if(!c.env.SUPABASE_SECRET_KEY)return c.json({message:'A central de mensagens ainda não está configurada.'},503);
+  const current=await rpc('state'),profile=current?.profile||{},isAdmin=!!current?.admin,now=Date.now();
+  if(!isAdmin&&profile.kind!=='courier')return c.json({message:'Mensagens disponíveis somente para entregadores e administração.'},403);
+  const base=c.env.SUPABASE_URL+'/rest/v1',rows=await serviceJson(base+'/vuppi_courier_messages?select=*&order=created_at.desc&limit=100'),reads=isAdmin?[]:await serviceJson(base+'/vuppi_courier_message_reads?select=message_id,read_at&courier_id=eq.'+encodeURIComponent(user.id)),readMap=new Map((reads||[]).map(x=>[x.message_id,x.read_at]));
+  const eligible=row=>isAdmin||(
+   row.active&&new Date(row.starts_at).getTime()<=now&&(!row.ends_at||new Date(row.ends_at).getTime()>now)&&(
+    row.target_kind==='all'||
+    (row.target_kind==='city'&&String(row.target_value).toLowerCase()===String(profile.city||'').toLowerCase())||
+    (row.target_kind==='courier'&&row.target_value===user.id)
+   )
+  );
+  const messages=(rows||[]).filter(eligible).map(row=>({...row,read_at:readMap.get(row.id)||null}));
+  return reply({messages,unread:isAdmin?0:messages.filter(x=>!x.read_at).length,admin:isAdmin});
  }
  if(path==='/api/delivery/state'&&request.method==='GET'){
   const state=await c.upstream('/rest/v1/rpc/vuppi_delivery_state',{method:'POST',token:s.access,body:{},carErrors:true});
@@ -72,7 +89,7 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
-  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','courier_release','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','courier_release','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
   const courierActions=new Set(['availability','location','accept','reject','courier_release','arrive_pickup','collect','complete','return_start','return_finalize']);
   if(courierActions.has(action)){
    const current=await rpc('state'),profile=current?.profile,status=profile?.member_status||(profile?.approved?'active':'pending');
@@ -84,6 +101,25 @@ export async function handleDelivery(request,c){
   if(action==='arrive_pickup')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_pickup_arrive',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='return_start')return reply(await c.upstream('/rest/v1/rpc/vuppi_start_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='return_finalize')return reply(await c.upstream('/rest/v1/rpc/vuppi_finalize_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action.startsWith('message_')){
+   if(!c.env.SUPABASE_SECRET_KEY)return c.json({message:'A central de mensagens ainda não está configurada.'},503);
+   const current=await rpc('state'),profile=current?.profile||{},base=c.env.SUPABASE_URL+'/rest/v1';
+   if(action==='message_read'){
+    if(profile.kind!=='courier')return c.json({message:'Leitura disponível somente para entregadores.'},403);
+    if(!/^[0-9a-f-]{36}$/i.test(data.id||''))return c.json({message:'Mensagem inválida.'},400);
+    await serviceJson(base+'/vuppi_courier_message_reads?on_conflict=message_id,courier_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({message_id:data.id,courier_id:user.id,read_at:new Date().toISOString()})});return reply({ok:true});
+   }
+   if(!current.admin)return c.json({message:'Acesso exclusivo da administração.'},403);
+   if(action==='message_archive'){
+    if(!/^[0-9a-f-]{36}$/i.test(data.id||''))return c.json({message:'Mensagem inválida.'},400);
+    await serviceJson(base+'/vuppi_courier_messages?id=eq.'+encodeURIComponent(data.id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({active:false,updated_at:new Date().toISOString()})});return reply({ok:true});
+   }
+   const title=String(data.title||'').trim().slice(0,90),body=String(data.body||'').trim().slice(0,1200),priority=['normal','important','urgent'].includes(data.priority)?data.priority:'normal',targetKind=['all','city','courier'].includes(data.target_kind)?data.target_kind:'all',targetValue=targetKind==='all'?null:String(data.target_value||'').trim();
+   if(title.length<3||body.length<3)return c.json({message:'Informe título e mensagem completos.'},400);
+   if(targetKind!=='all'&&!targetValue)return c.json({message:'Selecione o destino da mensagem.'},400);
+   const row={title,body,priority,target_kind:targetKind,target_value:targetValue||null,action_label:String(data.action_label||'').trim().slice(0,40)||null,action_url:String(data.action_url||'').trim().slice(0,500)||null,starts_at:data.starts_at||new Date().toISOString(),ends_at:data.ends_at||null,active:true,created_by:user.id};
+   const created=await serviceJson(base+'/vuppi_courier_messages',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(row)});return reply(created?.[0]||row);
+  }
   if(action==='complete'){const progress=await c.upstream('/rest/v1/rpc/vuppi_start_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true});if(progress?.return_required)return reply(progress);}
   if(action==='location')return reply(await c.upstream('/rest/v1/rpc/vuppi_driver_location',{method:'POST',token:s.access,body:{p_lat:Number(data?.lat),p_lng:Number(data?.lng)},carErrors:true}));
   if(action==='logistics_state')return reply(await c.upstream('/rest/v1/rpc/vuppi_logistics_admin',{method:'POST',token:s.access,body:{p_action:'state',p_data:{}},carErrors:true}));
