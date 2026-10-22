@@ -5,7 +5,7 @@ const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const admin=read('dist/admin.js'),css=read('dist/admin.css'),delivery=read('server/delivery.mjs'),finance=read('server/financial.mjs'),sql=read('supabase/migrations/202610130001_operation_wallet_hardening.sql');
 
 for(const invariant of ['dateStart','order-date-start','order-date-end','order-merchant','order-courier','admin_manage','redistribute-order','finalize-order','edit-order-form'])assert.ok(admin.includes(invariant),`gestão de OS sem ${invariant}`);
-assert.match(admin,/orders\.filter\(isPending\)/);
+assert.match(admin,/state\.pending\?\.deliveries/);
 assert.doesNotMatch(admin,/mode==='occurrences'\?orders\.filter\(o=>o\.status==='cancelled'\)/);
 for(const invariant of ['wallet-adjust-modal','data-adjust-wallet','admin_adjust','amount_cents','idempotency_key'])assert.ok(admin.includes(invariant),`carteira administrativa sem ${invariant}`);
 for(const invariant of ['city-grid','dispatch-flow','logistics-kpis','type-flow'])assert.ok(admin.includes(invariant),`redesign administrativo sem ${invariant}`);

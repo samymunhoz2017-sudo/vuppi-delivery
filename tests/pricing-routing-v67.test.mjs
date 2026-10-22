@@ -5,7 +5,7 @@ for(const token of ['vuppi_delivery_tariffs','pricing_snapshot','return_required
 for(const token of ['route_total_cents','route_stop_count','vuppi_courier_release_route','offer_radius_km','accepted_ids','reoffered'])assert.ok(routing.includes(token),'roteirização sem '+token);
 for(const token of ['pricing_state','pricing_save','pricing_test','pricing_delete_override','return_required:!!data.return_required','navigationInstruction.instructions','courier_release'])assert.ok(server.includes(token),'API sem '+token);
 assert.match(html,/data-admin-tab="pricing"/);for(const token of ['pricingView','Salvar e ativar nova versão','Simular antes de salvar'])assert.ok(admin.includes(token));
-for(const token of ['TextToSpeech','voice_guidance','hide_earnings','totalToday','Cancelar e reofertar rota','route_stop_count'])assert.ok(android.includes(token),'Android sem '+token);
+for(const token of ['TextToSpeech','voice_guidance','hide_earnings','totalToday','Problema com a rota · cancelar','route_stop_count'])assert.ok(android.includes(token),'Android sem '+token);
 assert.doesNotMatch(android,/active!=null\)map\.animateCamera/);
 console.log('V67: preço configurável, rota atômica, raio, reoferta, voz e estabilidade do mapa verificados.');
 

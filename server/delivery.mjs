@@ -1,11 +1,12 @@
 // Rotas públicas de baixo volume. Somente o servidor calcula e grava cotações.
-let nextRoute=0;const liveRouteWindows=new Map();
+let nextRoute=0,pendingMaintenanceAt=0;const liveRouteWindows=new Map();
 export async function handleDelivery(request,c){
  const {s,user}=await c.session(),path=new URL(request.url).pathname;
  const rpc=async(action,data={})=>c.upstream('/rest/v1/rpc/vuppi_delivery',{method:'POST',token:s.access,body:{p_action:action,p_data:data},carErrors:true});
  const reply=async data=>{await c.renewCookie();return c.json(data)};
  const serviceHeaders=()=>({apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json'});
  const serviceJson=async(url,options={})=>{const response=await c.fetcher(url,{...options,headers:{...serviceHeaders(),...(options.headers||{})},signal:AbortSignal.timeout(10000)}),text=await response.text(),body=text?JSON.parse(text):null;if(!response.ok)throw Error(body?.message||body?.error||'Falha ao consultar a central de mensagens.');return body};
+ const maintainPending=async()=>{if(!c.env.SUPABASE_SECRET_KEY||Date.now()<pendingMaintenanceAt)return;pendingMaintenanceAt=Date.now()+5000;try{await serviceJson(c.env.SUPABASE_URL+'/rest/v1/rpc/vuppi_pending_maintenance',{method:'POST',body:'{}'});}catch(error){pendingMaintenanceAt=Date.now()+15000;console.warn('pending_maintenance_unavailable',{message:error.message})}};
  const geocode=async address=>{
   const query=String(address||'').trim();if(query.length<5||!/(?:^|\D)\d{1,6}(?:\D|$)/.test(query))throw Error('Informe um endereço completo, com rua e número.');
   if(!c.env.GOOGLE_MAPS_SERVER_KEY)throw Error('O Google Maps ainda aguarda a chave segura do servidor.');
@@ -41,6 +42,7 @@ export async function handleDelivery(request,c){
   return reply({messages,unread:isAdmin?0:messages.filter(x=>!x.read_at).length,admin:isAdmin});
  }
  if(path==='/api/delivery/state'&&request.method==='GET'){
+  await maintainPending();
   const state=await c.upstream('/rest/v1/rpc/vuppi_delivery_state',{method:'POST',token:s.access,body:{},carErrors:true});
   if(state?.profile?.kind==='courier'){
    const rules=await c.upstream('/rest/v1/rpc/vuppi_courier_financial_rules',{method:'POST',token:s.access,body:{},carErrors:true}),share=Math.max(0,Math.min(10000,Number(rules?.courier_share_bps??8500)));
@@ -48,6 +50,7 @@ export async function handleDelivery(request,c){
    state.orders=(state.orders||[]).map(net);state.offers=(state.offers||[]).map(net);state.financial_rules={courier_share_bps:share};
   }
   if(state?.admin&&c.env.SUPABASE_SECRET_KEY){
+   try{state.pending=await c.upstream('/rest/v1/rpc/vuppi_pending_admin',{method:'POST',token:s.access,body:{p_action:'state',p_data:{}},carErrors:true})}catch(error){console.warn('pending_admin_state_unavailable',{message:error.message})}
    try{
     const response=await c.fetcher(c.env.SUPABASE_URL+'/auth/v1/admin/users?page=1&per_page=100',{headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY},signal:AbortSignal.timeout(10000)}),body=response.ok?await response.json():{},existing=new Set((state.members||[]).map(x=>x.user_id));
     for(const account of body.users||[]){const name=String(account.user_metadata?.full_name||'').trim();if(!name||existing.has(account.id))continue;(state.members??=[]).push({user_id:account.id,kind:'courier',name,email:account.email||'',phone:'',city:'',address:'Cadastro operacional ainda não concluído',approved:false,member_status:'pending',registration_incomplete:true,created_at:account.created_at,last_active_at:account.last_sign_in_at||null,is_available:false})}
@@ -56,6 +59,7 @@ export async function handleDelivery(request,c){
   return reply(state);
  }
  if(path==='/api/delivery/pending'&&request.method==='GET'){
+  await maintainPending();
   const pending=await c.upstream('/rest/v1/rpc/vuppi_courier_pending_state',{method:'POST',token:s.access,body:{},carErrors:true}),rules=await c.upstream('/rest/v1/rpc/vuppi_courier_financial_rules',{method:'POST',token:s.access,body:{},carErrors:true}),share=Math.max(0,Math.min(10000,Number(rules?.courier_share_bps??8500))),net=row=>({...row,price_cents:Math.floor(Math.max(0,Number(row?.price_cents||0))*share/10000),courier_price_cents:Math.floor(Math.max(0,Number(row?.price_cents||0))*share/10000)});
   pending.available=(pending.available||[]).map(net);pending.decisions=(pending.decisions||[]).map(net);return reply(pending);
  }
@@ -89,7 +93,7 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
-  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','courier_release','assign','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','courier_release','assign','pending_resend','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
   const courierActions=new Set(['availability','location','accept','reject','courier_release','arrive_pickup','collect','complete','return_start','return_finalize']);
   if(courierActions.has(action)){
    const current=await rpc('state'),profile=current?.profile,status=profile?.member_status||(profile?.approved?'active':'pending');
@@ -98,6 +102,8 @@ export async function handleDelivery(request,c){
   if(action==='accept')return reply(await c.upstream('/rest/v1/rpc/vuppi_accept_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='reject')return reply(await c.upstream('/rest/v1/rpc/vuppi_reject_delivery_offer',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='courier_release')return reply(await c.upstream('/rest/v1/rpc/vuppi_courier_release_route',{method:'POST',token:s.access,body:{p_delivery:data.id,p_reason:data.reason||null},carErrors:true}));
+  if(action==='assign')return reply(await c.upstream('/rest/v1/rpc/vuppi_assign_delivery',{method:'POST',token:s.access,body:{p_delivery:data.id,p_courier:data.courier},carErrors:true}));
+  if(action==='pending_resend')return reply(await c.upstream('/rest/v1/rpc/vuppi_pending_admin',{method:'POST',token:s.access,body:{p_action:'resend',p_data:{id:data.id,reason:data.reason||'Reenvio manual pela central'}},carErrors:true}));
   if(action==='arrive_pickup')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_pickup_arrive',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='return_start')return reply(await c.upstream('/rest/v1/rpc/vuppi_start_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='return_finalize')return reply(await c.upstream('/rest/v1/rpc/vuppi_finalize_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));

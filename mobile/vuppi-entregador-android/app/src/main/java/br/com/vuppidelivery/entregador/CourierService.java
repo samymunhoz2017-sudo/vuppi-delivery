@@ -52,8 +52,8 @@ public class CourierService extends Service {
     if(!checking.compareAndSet(false,true))return;
     try{
       if((active||available)&&!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);
-      JSONObject state=api.get("/api/delivery/state");JSONObject profile=state.optJSONObject("profile");available=profile!=null&&profile.optBoolean("is_available");JSONArray offers=state.optJSONArray("offers");JSONObject offer=(active||available)?firstEligibleOffer(offers):null;String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
-      main.post(()->presentOffer(offer,observation));flushPendingRejections();pollCentralMessages();
+      JSONObject state=api.get("/api/delivery/state");JSONObject profile=state.optJSONObject("profile");available=profile!=null&&profile.optBoolean("is_available");JSONArray offers=state.optJSONArray("offers");JSONObject offer=(active||available)?firstEligibleOffer(offers):null;if(offer==null&&available){try{JSONObject pending=api.get("/api/delivery/pending");offer=firstEligibleOffer(pending.optJSONArray("available"));if(offer!=null)offer.put("pending_alert",true);}catch(Exception ignored){}}String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
+      JSONObject finalOffer=offer;main.post(()->presentOffer(finalOffer,observation));flushPendingRejections();pollCentralMessages();
     }catch(Exception ignored){}finally{checking.set(false);}
   }
   private void stopLocationUpdates(){if(callback!=null)try{location.removeLocationUpdates(callback);}catch(Exception ignored){}callback=null;updatesStarted=false;lastLocation=null;}
