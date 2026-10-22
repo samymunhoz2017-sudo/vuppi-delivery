@@ -13,6 +13,21 @@ alter table public.vuppi_deliveries
  add column if not exists accepted_from text;
 
 alter table public.vuppi_operation_settings
+ add column if not exists dispatch_lead_minutes integer not null default 10,
+ add column if not exists pickup_deadline_minutes integer not null default 15,
+ add column if not exists offer_radius_km integer not null default 15,
+ add column if not exists route_grouping_enabled boolean not null default true,
+ add column if not exists multi_pickup_enabled boolean not null default true,
+ add column if not exists max_group_deliveries integer not null default 3,
+ add column if not exists completion_radius_m integer not null default 250,
+ add column if not exists single_active_delivery boolean not null default true,
+ add column if not exists reoffer_delay_seconds integer not null default 30,
+ add column if not exists pending_after_seconds integer not null default 90,
+ add column if not exists max_offer_rounds integer not null default 5,
+ add column if not exists offer_sound_enabled boolean not null default true,
+ add column if not exists push_enabled boolean not null default true,
+ add column if not exists operation_timezone text not null default 'America/Sao_Paulo',
+ add column if not exists updated_by uuid,
  add column if not exists pending_expiry_seconds integer not null default 600,
  add column if not exists pending_list_radius_km numeric(6,2) not null default 30,
  add column if not exists pending_accept_radius_km numeric(6,2) not null default 20,
