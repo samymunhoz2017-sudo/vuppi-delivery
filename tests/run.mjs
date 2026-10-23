@@ -23,3 +23,4 @@ await import('./admin-pricing-os-v71.test.mjs');
 await import('./financial-rules-v72.test.mjs');
 await import('./communications-v73.test.mjs');
 await import('./pending-state-machine-v76.test.mjs');
+await import('./withdrawal-admin-v77.test.mjs');
