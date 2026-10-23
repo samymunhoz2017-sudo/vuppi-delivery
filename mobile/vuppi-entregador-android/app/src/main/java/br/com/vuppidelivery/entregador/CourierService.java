@@ -45,7 +45,7 @@ public class CourierService extends Service {
   private void startLocationUpdatesIfAllowed(){
     if(updatesStarted||ActivityCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)return;
     updatesStarted=true;callback=new LocationCallback(){@Override public void onLocationResult(LocationResult r){Location p=r.getLastLocation();if(p!=null){lastLocation=p;new Thread(()->sendLocation(p),"vuppi-location").start();}}};
-    LocationRequest req=new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,4000).setMinUpdateIntervalMillis(2000).setMinUpdateDistanceMeters(3).setWaitForAccurateLocation(false).build();location.requestLocationUpdates(req,callback,Looper.getMainLooper());
+    LocationRequest req=new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY,2500).setMinUpdateIntervalMillis(1000).setMinUpdateDistanceMeters(1).setWaitForAccurateLocation(false).build();location.requestLocationUpdates(req,callback,Looper.getMainLooper());
   }
   private void sendLocation(Location p){try{JSONObject d=new JSONObject();d.put("lat",p.getLatitude());d.put("lng",p.getLongitude());api.action("location",d);}catch(Exception ignored){}}
   private void tick(Location p){

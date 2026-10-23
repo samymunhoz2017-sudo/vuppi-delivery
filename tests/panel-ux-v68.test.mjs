@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const admin=read('dist/admin.js'),delivery=read('dist/delivery.js'),guide=read('dist/product-guide.js'),guideCss=read('dist/product-guide.css'),adminHtml=read('dist/admin.html'),deliveryHtml=read('dist/delivery.html');
-for(const invariant of ['command-hero','Aguardando despacho','FILA DE ATENÇÃO','data-admin-go','Fluxo das entregas de hoje'])assert.ok(admin.includes(invariant),`dashboard administrativo sem ${invariant}`);
+for(const invariant of ['overview-premium','Aguardando atribuição','O que precisa da sua atenção','data-admin-go','Fluxo de entregas'])assert.ok(admin.includes(invariant),`dashboard administrativo sem ${invariant}`);
 for(const invariant of ['merchantPeriod','dashboardRows','merchant-history-start','paintHistory','merchantPrefsKey','merchant-auto-refresh','merchant-update-sound'])assert.ok(delivery.includes(invariant),`painel do estabelecimento sem ${invariant}`);
 for(const invariant of ['adminHelp','merchantHelp','vuppi-help-launcher','vuppiHelp','Iniciar tutorial desta tela'])assert.ok(guide.includes(invariant),`tutorial contextual sem ${invariant}`);
 assert.match(guideCss,/\.vuppi-tooltip/);assert.match(guideCss,/\.vuppi-tour-target/);

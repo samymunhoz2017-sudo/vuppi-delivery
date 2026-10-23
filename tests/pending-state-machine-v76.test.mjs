@@ -8,6 +8,6 @@ const service=readFileSync(new URL('../mobile/vuppi-entregador-android/app/src/m
 for(const token of ["'pending'","'unattended'",'pending_since','pending_expires_at','vuppi_pending_maintenance','vuppi_pending_admin','vuppi_assign_delivery','pg_advisory_xact_lock','pending_list_radius_km','pending_accept_radius_km'])assert.ok(migration.includes(token),'migração de pendências sem '+token);
 assert.ok(server.includes('maintainPending')&&server.includes("action==='pending_resend'")&&server.includes('vuppi_assign_delivery'),'API sem fonte canônica/ações de pendência');
 assert.ok(admin.includes("const isPendingOrder=o=>o.status==='pending'")&&admin.includes('state.pending?.deliveries')&&admin.includes('data-pending-resend'),'painel ainda deriva pendência no navegador');
-assert.ok(android.includes('Problema com a rota · cancelar')&&android.includes('private int pendingCount(){if(pendingState==null)return 0'),'Android sem cancelamento ou badge canônico');
+assert.ok(android.includes('Cancelar rota')&&android.includes('private int pendingCount(){if(pendingState==null)return 0'),'Android sem cancelamento ou badge canônico');
 assert.ok(service.includes('api.get("/api/delivery/pending")')&&service.includes('pending_alert'),'serviço Android não alerta pendências');
 console.log('pending-state-machine-v76.test.mjs ok');
