@@ -2,7 +2,7 @@ import assets from './assets.mjs';
 import {handleCarros,runCarDispatch} from './carros.mjs';
 import {handleDelivery} from './delivery.mjs';
 import {handleFinancial,handleMercadoPagoWebhook,paymentProvider,runFinanceBilling} from './financial.mjs';
-const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.77.0',ANDROID_VERSION='0.77.0';
+const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.78.0',ANDROID_VERSION='0.78.0';
 const encoder=new TextEncoder(),refreshed=new Map();
 class AppError extends Error{constructor(message,status=400,clear=false){super(message);this.status=status;this.clear=clear}}
 const secureHeaders={
@@ -42,7 +42,7 @@ export function createWorker(assetMap=assets,fetcher=(...args)=>fetch(...args)){
    if(request.headers.get('Sec-Fetch-Site')==='cross-site'||(request.method==='POST'&&!nativeClient(request)&&request.headers.get('Origin')!==url.origin))throw new AppError('Origem não autorizada.',403);
    if(url.pathname==='/api/app/version'&&request.method==='GET'){
     const latest=newestVersion(env.UP_ANDROID_LATEST_VERSION,ANDROID_VERSION),minimum=env.UP_ANDROID_MINIMUM_VERSION||env.UP_ANDROID_MIN_VERSION||'0.55.0',rollout=Math.max(0,Math.min(100,Number(env.UP_ANDROID_ROLLOUT_PERCENTAGE||100)));
-    return json({platform:url.searchParams.get('platform')||'web',environment:'production',current_web_version:WEB_VERSION,latest_version:latest,minimum_supported_version:minimum,update_type:env.UP_ANDROID_UPDATE_TYPE==='required'?'required':'optional',store_url:env.UP_ANDROID_STORE_URL||'/downloads/vuppi-entregador.apk',title:safePortuguese(env.UP_ANDROID_UPDATE_TITLE,'Atualiza\u00e7\u00e3o dispon\u00edvel'),message:safePortuguese(env.UP_ANDROID_UPDATE_MESSAGE,'Atualize para receber melhorias de estabilidade e seguran\u00e7a.'),released_at:env.UP_ANDROID_RELEASED_AT||'',active:env.UP_ANDROID_UPDATE_ACTIVE==='true',rollout_percentage:rollout});
+    return json({platform:url.searchParams.get('platform')||'web',environment:'production',current_web_version:WEB_VERSION,latest_version:latest,minimum_supported_version:minimum,update_type:env.UP_ANDROID_UPDATE_TYPE==='required'?'required':'optional',store_url:env.UP_ANDROID_STORE_URL||'/downloads/vuppi-entregador.apk',title:safePortuguese(env.UP_ANDROID_UPDATE_TITLE,'Atualiza\u00e7\u00e3o dispon\u00edvel'),message:safePortuguese(env.UP_ANDROID_UPDATE_MESSAGE,'Atualize para receber melhorias de estabilidade e seguran\u00e7a.'),released_at:env.UP_ANDROID_RELEASED_AT||'',active:env.UP_ANDROID_UPDATE_ACTIVE!=='false',rollout_percentage:rollout});
    }
    const options=config(env);
    if(url.pathname==='/api/auth/status'&&request.method==='GET')return json({ready:!!options});

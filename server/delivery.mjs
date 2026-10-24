@@ -174,9 +174,11 @@ export async function handleDelivery(request,c){
    if(!(state.cities||[]).some(row=>row.id===city))return c.json({message:'Cidade indisponível.'},400);
    if(action==='admin_member_update'){
     if(!/^[0-9a-f-]{36}$/i.test(id||''))return c.json({message:'Cadastro inválido.'},400);
-    const payload={name,phone,city,address};for(const field of ['legal_name','cnpj','contract_number','vehicle_model','vehicle_plate','vehicle_model_2','vehicle_plate_2','document_cpf','document_cnh'])if(data[field]!=null)payload[field]=clean(data[field],140)||null;
+    const payload={name,phone,city,address};for(const field of ['legal_name','cnpj','contract_number','vehicle_model','vehicle_plate','vehicle_model_2','vehicle_plate_2','document_cpf','document_cnh','state_registration','responsible_name','responsible_document','contact_email','cep','address_number','address_complement','district'])if(data[field]!=null)payload[field]=clean(data[field],140)||null;
     if(kind==='merchant'){
      for(const field of ['payment_wallet_enabled','payment_cash_enabled','payment_pix_enabled','payment_credit_enabled'])if(data[field]!=null)payload[field]=data[field]===true||data[field]==='true'||data[field]==='on';
+     for(const field of ['proof_of_delivery_required','pickup_code_required'])if(data[field]!=null)payload[field]=data[field]===true||data[field]==='true'||data[field]==='on';
+     if(data.max_delivery_stops!=null)payload.max_delivery_stops=Math.max(1,Math.min(30,Number(data.max_delivery_stops)||10));
      if(data.cash_platform_fee_bps!=null&&data.cash_platform_fee_bps!==''){const fee=Number(data.cash_platform_fee_bps);if(!Number.isInteger(fee)||fee<0||fee>10000)return c.json({message:'Taxa de dinheiro inválida.'},400);payload.cash_platform_fee_bps=fee}else payload.cash_platform_fee_bps=null;
     }
     const updated=await c.fetcher(c.env.SUPABASE_URL+'/rest/v1/vuppi_members?user_id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
