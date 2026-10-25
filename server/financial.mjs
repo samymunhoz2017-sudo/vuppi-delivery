@@ -50,7 +50,7 @@ async function providerJson(fetcher,url,options,message){
 }
 
 export class MercadoPagoPaymentProvider{
- constructor(env={},fetcher=fetch){this.name='mercadopago';this.enabled=env.MERCADOPAGO_ENABLED==='true';this.live=env.MERCADOPAGO_LIVE_MODE==='true';this.accessToken=env.MERCADOPAGO_ACCESS_TOKEN||'';this.origin=String(env.UP_PUBLIC_ORIGIN||'https://vuppidelivery.com.br').replace(/\/$/,'');this.fetcher=fetcher}
+ constructor(env={},fetcher=fetch){this.name='mercadopago';this.enabled=env.MERCADOPAGO_ENABLED==='true';this.live=env.MERCADOPAGO_LIVE_MODE==='true';this.accessToken=env.MERCADOPAGO_ACCESS_TOKEN||'';this.payoutAccessToken=env.MERCADOPAGO_PAYOUTS_ACCESS_TOKEN||this.accessToken;this.payoutsEnabled=env.MERCADOPAGO_PAYOUTS_ENABLED==='true';this.payoutPrivateKey=String(env.MERCADOPAGO_PAYOUTS_PRIVATE_KEY||'').replace(/\\n/g,'\n');this.origin=String(env.UP_PUBLIC_ORIGIN||'https://vuppidelivery.com.br').replace(/\/$/,'');this.fetcher=fetcher}
  assertReady(){if(!this.enabled)throw Error('Mercado Pago ainda não foi ativado.');if(!this.accessToken)throw Error('Credencial do Mercado Pago não configurada.')}
  headers(idempotencyKey=''){return {Authorization:'Bearer '+this.accessToken,'Content-Type':'application/json',...(idempotencyKey?{'X-Idempotency-Key':idempotencyKey}:{})}}
  async createPixPayment(input){
@@ -61,6 +61,9 @@ export class MercadoPagoPaymentProvider{
   return {provider:this.name,reference:String(data.id),status:String(data.status||'pending'),payment_method:'pix',qr_code:String(pix.qr_code),qr_code_base64:String(pix.qr_code_base64),ticket_url:String(pix.ticket_url||''),expires_at:data.date_of_expiration||null,live_mode:data.live_mode===true};
  }
  async getPayment(id){this.assertReady();if(!/^\d{1,32}$/.test(String(id)))throw Error('Pagamento do Mercado Pago inválido.');return providerJson(this.fetcher,'https://api.mercadopago.com/v1/payments/'+id,{headers:this.headers()},'Não foi possível consultar o pagamento no Mercado Pago.')}
+ async payoutSignature(body){if(!this.payoutPrivateKey)throw Error('Chave privada Ed25519 do Mercado Pago Payouts não configurada.');const encoded=this.payoutPrivateKey.replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,''),bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)),key=await crypto.subtle.importKey('pkcs8',bytes,{name:'Ed25519'},false,['sign']),signature=await crypto.subtle.sign('Ed25519',key,new TextEncoder().encode(body));return btoa(String.fromCharCode(...new Uint8Array(signature)))}
+ async requestPixTransfer(input){this.assertReady();if(!this.payoutsEnabled)throw Error('Mercado Pago Payouts ainda não está habilitado nesta integração.');if(!this.payoutAccessToken)throw Error('Access Token de Payouts não configurado.');const reference=String(input.externalReference||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,50);if(!reference)throw Error('Referência de saque inválida.');const body=JSON.stringify({external_reference:reference,config:{notification_url:this.origin+'/api/finance/mercadopago/payout-webhook'},description:'Saque Vuppi Delivery',transactions:[{description:'Repasse entregador Vuppi',type:'pix',pix:{type:input.pixType,chave:input.pixKey},amount:{currency:'BRL',value:Number(input.value)},external_reference:reference}]});const signature=await this.payoutSignature(body),data=await providerJson(this.fetcher,'https://api.mercadopago.com/v1/payouts',{method:'POST',headers:{Authorization:'Bearer '+this.payoutAccessToken,'Content-Type':'application/json','X-Idempotency-Key':reference,'X-enforce-signature':'true','X-test-token':'false','X-signature':signature},body},'Não foi possível enviar o Pix pelo Mercado Pago.');const transaction=data.transactions?.[0];if(!data.id||!transaction?.id)throw Error('Mercado Pago não devolveu os identificadores do saque.');return {provider:this.name,payout_id:String(data.id),transaction_id:String(transaction.id),status:String(data.status||'created'),raw:data}}
+ async getPayoutTransaction(payoutId,transactionId){this.assertReady();if(!this.payoutsEnabled)throw Error('Mercado Pago Payouts não está habilitado.');return providerJson(this.fetcher,`https://api.mercadopago.com/v1/payouts/${encodeURIComponent(payoutId)}/transactions/${encodeURIComponent(transactionId)}`,{headers:{Authorization:'Bearer '+this.payoutAccessToken,'Content-Type':'application/json','X-test-token':'false'}},'Não foi possível consultar o saque no Mercado Pago.')}
 }
 
 export function paymentProvider(env={},fetcher=fetch){if(env.MERCADOPAGO_ENABLED==='true')return new MercadoPagoPaymentProvider(env,fetcher);return env.ASAAS_ENABLED==='true'?new AsaasPaymentProvider(env,fetcher):new FakePaymentProvider()}
@@ -78,6 +81,9 @@ async function serviceRpc(env,fetcher,name,body){
  return providerJson(fetcher,base+'/rest/v1/rpc/'+name,{method:'POST',headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify(body)},'Não foi possível liquidar a recarga.');
 }
 
+function normalizePixKey(value){const key=String(value||'').trim();if(key.length<5||key.length>140)throw Error('Informe uma chave Pix válida.');const digits=key.replace(/\D/g,'');let type='PIX_CODE';if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key))type='EMAIL';else if(digits.length===11&&/^\+?\d/.test(key)&&/[+() -]/.test(key))type='PHONE';else if(digits.length===11)type='CPF';else if(digits.length===14)type='CNPJ';return {key,type,masked:type==='EMAIL'?key.replace(/^(.{2}).*(@.*)$/,'$1***$2'):type==='PIX_CODE'?key.slice(0,4)+'***'+key.slice(-4):'***'+digits.slice(-4)}}
+async function syncMercadoPagoWithdrawal(c,id){const provider=c.paymentProvider();if(provider.name!=='mercadopago')throw Error('Saque Pix exige o Mercado Pago configurado.');const payload=await serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_payout_payload',{p_id:id});let payoutId=payload.provider_reference,transactionId=payload.metadata?.transaction_id;if(!payoutId){const sent=await provider.requestPixTransfer({externalReference:String(id),value:Number(payload.net_cents)/100,pixKey:payload.pix_key,pixType:payload.pix_type});payoutId=sent.payout_id;transactionId=sent.transaction_id;await serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_payout_submitted',{p_id:id,p_payout:payoutId,p_transaction:transactionId,p_status:sent.status,p_details:{submitted:true}})}if(!transactionId)return {ok:true,status:'processing',payout_id:payoutId};const transaction=await provider.getPayoutTransaction(payoutId,transactionId),status=String(transaction.status||''),detail=String(transaction.status_detail||'');if(status==='success'&&detail==='accredited')return serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_payout_finalize',{p_id:id,p_status:'success',p_details:{payout_id:payoutId,transaction_id:transactionId,status,status_detail:detail}});if(['error','rejected','refunded','canceled'].includes(status))return serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_payout_finalize',{p_id:id,p_status:status,p_details:{payout_id:payoutId,transaction_id:transactionId,status,status_detail:detail,message:'Transferência Pix não concluída: '+(detail||status)}});return {ok:true,status:'processing',provider_status:status,status_detail:detail,payout_id:payoutId,transaction_id:transactionId}}
+
 export async function handleMercadoPagoWebhook(request,c){
  const url=new URL(request.url),body=await c.readJson(request),dataId=String(url.searchParams.get('data.id')||body?.data?.id||'');
  if(String(url.searchParams.get('type')||body?.type||'')!=='payment'||!dataId)return c.json({received:true});
@@ -87,6 +93,13 @@ export async function handleMercadoPagoWebhook(request,c){
  if(!/^[0-9a-f-]{36}$/i.test(reference))return c.json({received:true});
  const amountCents=Math.round(Number(payment.transaction_amount)*100);if(!Number.isSafeInteger(amountCents)||amountCents<1)throw Error('Valor do pagamento inválido.');
  await serviceRpc(c.env,c.fetcher,'vuppi_mercadopago_settle',{p_topup:reference,p_payment_id:String(payment.id),p_status:String(payment.status||''),p_amount_cents:amountCents,p_currency:String(payment.currency_id||''),p_live_mode:payment.live_mode===true,p_details:{status_detail:String(payment.status_detail||''),payment_type_id:String(payment.payment_type_id||''),date_approved:payment.date_approved||null}});
+ return c.json({received:true});
+}
+
+export async function handleMercadoPagoPayoutWebhook(request,c){
+ const notice=await c.readJson(request),payoutId=String(notice?.payout?.id||''),transactionId=String(notice?.id||'');if(!payoutId||!transactionId)return c.json({received:true});
+ const provider=new MercadoPagoPaymentProvider(c.env,c.fetcher),transaction=await provider.getPayoutTransaction(payoutId,transactionId),reference=String(transaction.external_reference||notice.external_reference||'');if(!/^[0-9a-f-]{36}$/i.test(reference))return c.json({received:true});
+ const status=String(transaction.status||''),detail=String(transaction.status_detail||'');if(status==='success'&&detail==='accredited')await serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_payout_finalize',{p_id:reference,p_status:'success',p_details:{payout_id:payoutId,transaction_id:transactionId,status,status_detail:detail}});else if(['error','rejected','refunded','canceled'].includes(status))await serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_payout_finalize',{p_id:reference,p_status:status,p_details:{payout_id:payoutId,transaction_id:transactionId,status,status_detail:detail,message:'Transferência Pix não concluída: '+(detail||status)}});
  return c.json({received:true});
 }
 
@@ -104,7 +117,7 @@ export async function handleFinancial(request,c){
  const reply=async data=>{await c.renewCookie();return c.json(data)};
  if(path==='/api/finance/state'&&request.method==='GET'){
   const state=await rpc('state'),provider=c.paymentProvider(),webhookUrl=String(c.env.UP_PUBLIC_ORIGIN||'https://vuppidelivery.com.br').replace(/\/$/,'')+'/api/finance/mercadopago/webhook';
-  state.provider=provider.name==='mercadopago'?{name:'mercadopago',label:'Mercado Pago',enabled:provider.enabled===true,live_operations:provider.live===true,mode:provider.live?'production':'test',credential_configured:Boolean(provider.accessToken),webhook_configured:Boolean(c.env.MERCADOPAGO_WEBHOOK_SECRET),webhook_url:webhookUrl,payment_method:'pix',automatic_settlement:true}:{name:provider.name,enabled:false,live_operations:false,payment_method:'pix'};
+  state.provider=provider.name==='mercadopago'?{name:'mercadopago',label:'Mercado Pago',enabled:provider.enabled===true,live_operations:provider.live===true,mode:provider.live?'production':'test',credential_configured:Boolean(provider.accessToken),webhook_configured:Boolean(c.env.MERCADOPAGO_WEBHOOK_SECRET),webhook_url:webhookUrl,payment_method:'pix',automatic_settlement:true,payouts_enabled:provider.payoutsEnabled===true,payout_signature_configured:Boolean(provider.payoutPrivateKey),automatic_withdrawals:provider.payoutsEnabled===true&&Boolean(provider.payoutPrivateKey)}:{name:provider.name,enabled:false,live_operations:false,payment_method:'pix',payouts_enabled:false,automatic_withdrawals:false};
   try{state.billing=await billingRpc('state',{city:url.searchParams.get('city')||''});state.billing.ready=true}catch(error){state.billing={ready:false,message:error.message}}return reply(state);
  }
  if(path==='/api/finance/statement'&&request.method==='GET')return reply(await rpc('statement',{wallet_id:url.searchParams.get('wallet_id'),limit:Math.min(200,Math.max(1,Number(url.searchParams.get('limit')||50)))}));
@@ -120,7 +133,7 @@ export async function handleFinancial(request,c){
   if(action==='admin_adjust')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_wallet_adjust',{method:'POST',token:s.access,body:{p_wallet:data.wallet_id,p_direction:data.direction,p_amount_cents:Number(data.amount_cents),p_reason:data.reason,p_idempotency_key:data.idempotency_key},carErrors:true}));
   if(action==='settings_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_finance_settings_admin',{method:'POST',token:s.access,body:{p_data:data},carErrors:true}));
   if(action==='withdraw_request')await c.upstream('/rest/v1/rpc/vuppi_withdrawal_clear_stale',{method:'POST',token:s.access,body:{},carErrors:false});
-  if(action==='withdrawal_review')return reply(await c.upstream('/rest/v1/rpc/vuppi_withdrawal_review',{method:'POST',token:s.access,body:{p_id:data.id,p_reason:data.reason},carErrors:true}));
+  if(action==='withdrawal_review'){const provider=c.paymentProvider();if(provider.name!=='mercadopago'||!provider.payoutsEnabled||!provider.payoutPrivateKey)throw Error('Ative Mercado Pago Payouts e configure a assinatura Ed25519 antes de liberar o saque.');const reviewed=await c.upstream('/rest/v1/rpc/vuppi_withdrawal_review',{method:'POST',token:s.access,body:{p_id:data.id,p_reason:data.reason},carErrors:true});if(reviewed?.status==='processing')return reply(await syncMercadoPagoWithdrawal(c,data.id));return reply(reviewed)}
   if(action==='withdrawal_reject')return reply(await c.upstream('/rest/v1/rpc/vuppi_withdrawal_reject',{method:'POST',token:s.access,body:{p_id:data.id,p_reason:data.reason},carErrors:true}));
   if(billingActions.includes(action))return reply(await billingRpc(action.replace('billing_',''),data));
   if(action==='topup_request'){
@@ -134,8 +147,9 @@ export async function handleFinancial(request,c){
    if(provider.name==='fake')return reply({...created,provider:charge,simulation:true});
   }
   if(action==='withdraw_request'){
-   const created=await rpc(action,data);return reply({...created,provider_status:'not_sent',message:'Saque reservado. O envio externo permanece desativado até a homologação.'});
+   const pix=normalizePixKey(data.pix_key||data.pix_key_masked),created=await rpc(action,{...data,pix_key_masked:pix.masked});await serviceRpc(c.env,c.fetcher,'vuppi_withdrawal_store_pix',{p_id:created.id,p_key:pix.key,p_type:pix.type});return reply({...created,pix_key_masked:pix.masked,provider_status:'awaiting_approval',message:'Saque reservado e pronto para aprovação segura.'});
   }
+  if(action==='admin_process_withdrawal')return reply(await syncMercadoPagoWithdrawal(c,data.id));
   return reply(await rpc(action,data));
  }
  return c.json({message:'Recurso financeiro não encontrado.'},404);

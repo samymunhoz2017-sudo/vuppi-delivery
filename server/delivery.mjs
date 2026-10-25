@@ -93,7 +93,7 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
-  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','create','accept','reject','courier_release','assign','pending_resend','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','merchant_profile_update','create','accept','reject','courier_release','assign','pending_resend','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
   const courierActions=new Set(['availability','location','accept','reject','courier_release','arrive_pickup','collect','complete','return_start','return_finalize']);
   if(courierActions.has(action)){
    const current=await rpc('state'),profile=current?.profile,status=profile?.member_status||(profile?.approved?'active':'pending');
@@ -136,6 +136,7 @@ export async function handleDelivery(request,c){
   if(action==='remote_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_remote_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
   if(action==='courier_return_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_courier_return_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
   if(action==='profile_update')return reply(await c.upstream('/rest/v1/rpc/vuppi_update_courier_profile',{method:'POST',token:s.access,body:{p_data:data||{}},carErrors:true}));
+  if(action==='merchant_profile_update'){if(data?.address){const place=await geocode(data.address);data={...data,address:place.label,lat:place.lat,lng:place.lng}}return reply(await c.upstream('/rest/v1/rpc/vuppi_update_merchant_profile',{method:'POST',token:s.access,body:{p_data:data||{}},carErrors:true}));}
   if(action==='customer_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:data||{}},carErrors:true}));
   if(action==='admin_create'){
    const result=await c.upstream('/rest/v1/rpc/vuppi_create_delivery_transaction',{method:'POST',token:s.access,body:{p_data:data},carErrors:true});
@@ -146,7 +147,7 @@ export async function handleDelivery(request,c){
   if(action==='member_status')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_admin',{method:'POST',token:s.access,body:{p_action:action,p_data:data||{}},carErrors:true}));
   if(action==='cancel')return reply(await c.upstream('/rest/v1/rpc/vuppi_cancel_delivery',{method:'POST',token:s.access,body:{p_delivery:data.id,p_reason:data.reason||null},carErrors:true}));
   if(action==='merchant_manage'){
-   const operation=String(data.operation||'');if(!['couriers','join','assign','edit','optimize'].includes(operation))return c.json({message:'Operação de pedido inválida.'},400);
+   const operation=String(data.operation||'');if(!['couriers','join','assign','favorite','edit','optimize'].includes(operation))return c.json({message:'Operação de pedido inválida.'},400);
    if(operation==='optimize'){
     const current=await rpc('state'),anchor=(current.orders||[]).find(x=>x.id===data.id);
     if(!anchor)return c.json({message:'Entrega não encontrada.'},404);

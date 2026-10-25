@@ -52,7 +52,7 @@ public class CourierService extends Service {
     if(!checking.compareAndSet(false,true))return;
     try{
       if((active||available)&&!updatesStarted)main.post(this::startLocationUpdatesIfAllowed);
-      JSONObject state=api.get("/api/delivery/state");JSONObject profile=state.optJSONObject("profile");available=profile!=null&&profile.optBoolean("is_available");JSONArray offers=state.optJSONArray("offers");JSONObject offer=(active||available)?firstEligibleOffer(offers):null;if(offer==null&&available){try{JSONObject pending=api.get("/api/delivery/pending");offer=firstEligibleOffer(pending.optJSONArray("available"));if(offer!=null)offer.put("pending_alert",true);}catch(Exception ignored){}}String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
+      JSONObject state=api.get("/api/delivery/state");JSONObject profile=state.optJSONObject("profile");boolean access=profile!=null&&profile.optBoolean("approved")&&"active".equals(profile.optString("member_status","active"));available=access&&profile.optBoolean("is_available");JSONArray orders=state.optJSONArray("orders");active=access&&hasActiveDelivery(orders);if(!access){main.post(()->{clearOfferPresentation();removeFloatingIcon();stopLocationUpdates();});return;}JSONArray offers=state.optJSONArray("offers");JSONObject offer=available&&!active?firstEligibleOffer(offers):null;if(offer==null&&available&&!active){try{JSONObject pending=api.get("/api/delivery/pending");offer=firstEligibleOffer(pending.optJSONArray("available"));if(offer!=null)offer.put("pending_alert",true);}catch(Exception ignored){}}String offerId=offer==null?"":offer.optString("id");boolean suppressed=decisions.isSuppressed(offerId,System.currentTimeMillis());OfferStateMachine.Observation observation=offerState.observe(offerId,suppressed);
       JSONObject finalOffer=offer;main.post(()->presentOffer(finalOffer,observation));flushPendingRejections();pollCentralMessages();
     }catch(Exception ignored){}finally{checking.set(false);}
   }
@@ -63,6 +63,7 @@ public class CourierService extends Service {
     for(int i=0;i<offers.length();i++){JSONObject candidate=offers.optJSONObject(i);if(candidate!=null&&!decisions.isSuppressed(candidate.optString("id"),now))return candidate;}
     return null;
   }
+  private boolean hasActiveDelivery(JSONArray orders){if(orders==null)return false;for(int i=0;i<orders.length();i++){JSONObject row=orders.optJSONObject(i);String status=row==null?"":row.optString("status");if("assigned".equals(status)||"collected".equals(status))return true;}return false;}
   private void presentOffer(JSONObject offer,OfferStateMachine.Observation observation){
     boolean has=offer!=null&&observation!=OfferStateMachine.Observation.SUPPRESSED&&offerState.isPresentable();
     showFloatingIcon(has);

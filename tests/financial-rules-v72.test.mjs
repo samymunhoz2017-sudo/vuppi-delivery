@@ -15,7 +15,7 @@ for(const invariant of ['withdrawal_dual_approval_threshold_cents','dual_require
 assert.ok(deliveryServer.includes('Math.floor(gross*share/10000)'),'o backend deve substituir o bruto pelo líquido antes de responder ao entregador');
 assert.ok(deliveryServer.includes('delete copy.merchant_price_cents')&&deliveryServer.includes('delete copy.platform_fee_cents'));
 for(const label of ['ESTABELECIMENTO','ENTREGADOR','VUPPI MATRIZ','Valor líquido da entrega','Simulação sobre R$ 10,00'])assert.ok(admin.includes(label),`Central de taxas sem ${label}`);
-for(const invariant of ['withdrawalModal','data-review-withdrawal','Registrar pagamento do saque','admin-flash'])assert.ok(admin.includes(invariant),`Revisão de saque sem ${invariant}`);
+for(const invariant of ['withdrawalModal','data-review-withdrawal','Sincronizar pagamento Pix','admin-flash'])assert.ok(admin.includes(invariant),`Revisão de saque sem ${invariant}`);
 assert.ok(!admin.includes("prompt('Motivo da aprovação"),'A revisão de saque ainda depende de prompt incompatível.');
 assert.ok(admin.includes("action:'withdrawal_review'"),'O modal deve usar a revisão transacional de saques.');
 assert.ok(courier.includes('valor líquido a receber'));

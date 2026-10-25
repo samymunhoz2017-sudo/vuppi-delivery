@@ -142,3 +142,6 @@ body{border:0!important;outline:0!important}.header{border:0!important;box-shado
 
 /* v79 */
 .admin-authenticated.admin-overview-active .admin-plan{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;margin:24px 18px 18px!important}.admin-authenticated aside:first-child{overflow-y:auto}.courier-line .avatar{overflow:hidden}.courier-line .avatar img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+
+/* v80: saída sempre visível e identidade Vuppi 3D */
+.admin-signout-visible{min-height:42px;padding:0 16px;border:1px solid var(--admin-border-strong);border-radius:10px;background:var(--admin-surface);color:var(--admin-text);font-weight:850}.admin-signout-visible:hover{border-color:#8a2be2;color:#fff;background:#6a11cb}.admin-plan{position:relative;min-height:98px;padding-right:78px!important;overflow:hidden}.admin-plan>img{position:absolute;right:-2px;bottom:-10px;width:82px;height:82px;object-fit:contain;filter:drop-shadow(0 8px 14px #0007)}@media(max-width:767px){.admin-head-actions{flex-wrap:wrap}.admin-signout-visible{min-height:38px}}
