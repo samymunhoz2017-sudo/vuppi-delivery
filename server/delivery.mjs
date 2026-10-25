@@ -46,7 +46,7 @@ export async function handleDelivery(request,c){
   const state=await c.upstream('/rest/v1/rpc/vuppi_delivery_state',{method:'POST',token:s.access,body:{},carErrors:true});
   if(state?.profile?.kind==='courier'){
    const rules=await c.upstream('/rest/v1/rpc/vuppi_courier_financial_rules',{method:'POST',token:s.access,body:{},carErrors:true}),share=Math.max(0,Math.min(10000,Number(rules?.courier_share_bps??8500)));
-   const net=row=>{const copy={...row},gross=Math.max(0,Number(row?.price_cents||0));copy.price_cents=Math.floor(gross*share/10000);copy.courier_price_cents=copy.price_cents;delete copy.merchant_price_cents;delete copy.platform_fee_cents;return copy};
+   const net=row=>{const copy={...row},gross=Math.max(0,Number(row?.price_cents||0));copy.price_cents=Math.floor(gross*share/10000);copy.courier_price_cents=copy.price_cents;if(Array.isArray(copy.route_stops)){copy.route_stops=copy.route_stops.map(stop=>({...stop,price_cents:Math.floor(Math.max(0,Number(stop?.price_cents||0))*share/10000)}));copy.route_total_cents=copy.route_stops.reduce((sum,stop)=>sum+Number(stop.price_cents||0),0)}else if(copy.route_total_cents!=null)copy.route_total_cents=Math.floor(Math.max(0,Number(copy.route_total_cents))*share/10000);delete copy.merchant_price_cents;delete copy.platform_fee_cents;return copy};
    state.orders=(state.orders||[]).map(net);state.offers=(state.offers||[]).map(net);state.financial_rules={courier_share_bps:share};
   }
   if(state?.admin&&c.env.SUPABASE_SECRET_KEY){
@@ -93,7 +93,7 @@ export async function handleDelivery(request,c){
  }
  if(path==='/api/delivery/action'&&request.method==='POST'){
   const input=await c.readJson(request,600000),action=input.action;let data=input.data||{};
-  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','merchant_profile_update','create','accept','reject','courier_release','assign','pending_resend','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
+  if(!['register','admin_register','admin_courier_register','admin_member_update','availability','location','approve','member_status','admin_create','admin_manage','quick_delivery','profile_update','merchant_profile_update','create','accept','reject','courier_release','assign','pending_resend','arrive_pickup','collect','complete','cancel','remote_completion','courier_return_completion','courier_finance_admin','logistics_state','logistics_save','delivery_type_save','pricing_state','pricing_save','pricing_test','pricing_delete_override','merchant_manage','customer_save','return_start','return_finalize','message_create','message_read','message_archive'].includes(action))return c.json({message:'Ação inválida.'},400);
   const courierActions=new Set(['availability','location','accept','reject','courier_release','arrive_pickup','collect','complete','return_start','return_finalize']);
   if(courierActions.has(action)){
    const current=await rpc('state'),profile=current?.profile,status=profile?.member_status||(profile?.approved?'active':'pending');
@@ -135,6 +135,7 @@ export async function handleDelivery(request,c){
   if(action==='quick_delivery')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_quick_delivery',{method:'POST',token:s.access,body:{p_member:data.id,p_enabled:!!data.enabled},carErrors:true}));
   if(action==='remote_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_remote_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
   if(action==='courier_return_completion')return reply(await c.upstream('/rest/v1/rpc/vuppi_set_courier_return_completion',{method:'POST',token:s.access,body:{p_courier:data.id,p_enabled:!!data.enabled},carErrors:true}));
+  if(action==='courier_finance_admin')return reply(await c.upstream('/rest/v1/rpc/vuppi_courier_finance_admin',{method:'POST',token:s.access,body:{p_courier:data.id,p_share_bps:data.use_city_default?null:Number(data.courier_share_bps),p_reason:data.reason},carErrors:true}));
   if(action==='profile_update')return reply(await c.upstream('/rest/v1/rpc/vuppi_update_courier_profile',{method:'POST',token:s.access,body:{p_data:data||{}},carErrors:true}));
   if(action==='merchant_profile_update'){if(data?.address){const place=await geocode(data.address);data={...data,address:place.label,lat:place.lat,lng:place.lng}}return reply(await c.upstream('/rest/v1/rpc/vuppi_update_merchant_profile',{method:'POST',token:s.access,body:{p_data:data||{}},carErrors:true}));}
   if(action==='customer_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:data||{}},carErrors:true}));
@@ -147,7 +148,7 @@ export async function handleDelivery(request,c){
   if(action==='member_status')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_admin',{method:'POST',token:s.access,body:{p_action:action,p_data:data||{}},carErrors:true}));
   if(action==='cancel')return reply(await c.upstream('/rest/v1/rpc/vuppi_cancel_delivery',{method:'POST',token:s.access,body:{p_delivery:data.id,p_reason:data.reason||null},carErrors:true}));
   if(action==='merchant_manage'){
-   const operation=String(data.operation||'');if(!['couriers','join','assign','favorite','edit','optimize'].includes(operation))return c.json({message:'Operação de pedido inválida.'},400);
+   const operation=String(data.operation||'');if(!['couriers','join','assign','redistribute','favorite','edit','optimize'].includes(operation))return c.json({message:'Operação de pedido inválida.'},400);
    if(operation==='optimize'){
     const current=await rpc('state'),anchor=(current.orders||[]).find(x=>x.id===data.id);
     if(!anchor)return c.json({message:'Entrega não encontrada.'},404);

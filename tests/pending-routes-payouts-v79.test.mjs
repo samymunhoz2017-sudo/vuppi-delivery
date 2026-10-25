@@ -10,7 +10,7 @@ const sql=readFileSync(new URL('../supabase/migrations/202610240002_pending_rout
 
 assert.match(web,/offerRows=filter==='available'\|\|filter==='pending'/);
 assert.match(web,/\.\.\.offers,\.\.\.pendingOffers/);
-assert.match(nativeService,/available&&!active\?firstEligibleOffer/);
+assert.match(nativeService,/candidate\.optBoolean\("targeted_offer"\)/);
 assert.match(nativeService,/boolean access=profile!=null&&profile\.optBoolean\("approved"\)/);
 assert.match(nativeUi,/data\.put\("pix_key",pixKey\)/);
 
@@ -27,7 +27,7 @@ for(const invariant of [
 
 for(const invariant of ['/v1/payouts','X-signature','Ed25519','requestPixTransfer','handleMercadoPagoPayoutWebhook','syncMercadoPagoWithdrawal'])assert.ok(finance.includes(invariant),`Payouts sem ${invariant}`);
 for(const variable of ['MERCADOPAGO_PAYOUTS_ENABLED','MERCADOPAGO_PAYOUTS_ACCESS_TOKEN','MERCADOPAGO_PAYOUTS_PRIVATE_KEY'])assert.ok(host.includes(variable),`Host sem ${variable}`);
-assert.match(web,/Atribuir ou adicionar à rota/);
+assert.match(web,/Enviar oferta para este entregador/);
 assert.match(web,/Favoritar este entregador/);
 assert.match(web,/preferredCourier/);
 console.log('V79: pendências, presença online, rotas incrementais, favoritos e Payouts verificados.');

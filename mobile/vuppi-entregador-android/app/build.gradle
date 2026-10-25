@@ -14,8 +14,8 @@ android {
         applicationId 'br.com.vuppidelivery.entregador'
         minSdk 24
         targetSdk 36
-        versionCode 79
-        versionName '0.79.0'
+        versionCode 80
+        versionName '0.80.0'
         manifestPlaceholders = [GOOGLE_MAPS_ANDROID_KEY: mapsKey]
     }
     signingConfigs {
