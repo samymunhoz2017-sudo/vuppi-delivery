@@ -29,3 +29,4 @@ await import('./navigation-dashboard-v78.test.mjs');
 await import('./pending-routes-payouts-v79.test.mjs');
 await import('./targeted-offers-multiroute-v80.test.mjs');
 await import('./reliability-audit-v81.test.mjs');
+await import('./active-route-live-map-v82.test.mjs');
