@@ -2,7 +2,7 @@ import assets from './assets.mjs';
 import {handleCarros,runCarDispatch} from './carros.mjs';
 import {handleDelivery} from './delivery.mjs';
 import {handleFinancial,handleMercadoPagoWebhook,handleMercadoPagoPayoutWebhook,paymentProvider,runFinanceBilling} from './financial.mjs';
-const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.80.0',ANDROID_VERSION='0.80.0';
+const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.81.0',ANDROID_VERSION='0.81.0';
 const encoder=new TextEncoder(),refreshed=new Map();
 class AppError extends Error{constructor(message,status=400,clear=false){super(message);this.status=status;this.clear=clear}}
 const secureHeaders={

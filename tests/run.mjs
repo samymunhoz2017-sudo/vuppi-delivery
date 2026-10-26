@@ -28,3 +28,4 @@ await import('./withdrawal-admin-v77.test.mjs');
 await import('./navigation-dashboard-v78.test.mjs');
 await import('./pending-routes-payouts-v79.test.mjs');
 await import('./targeted-offers-multiroute-v80.test.mjs');
+await import('./reliability-audit-v81.test.mjs');
