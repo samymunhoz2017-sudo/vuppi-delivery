@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
+const migration=read('supabase/migrations/202610270001_scheduling_pending_route_atomicity.sql');
+const server=read('server/delivery.mjs');
+const delivery=read('dist/delivery.js');
+const admin=read('dist/admin.js');
+const css=read('dist/admin.css');
+const service=read('mobile/vuppi-entregador-android/app/src/main/java/br/com/vuppidelivery/entregador/CourierService.java');
+
+assert.match(migration,/vuppi_create_delivery_transaction/);
+assert.match(migration,/scheduled_at-make_interval/);
+assert.match(migration,/coalesce\(d\.dispatch_at,d\.scheduled_for,d\.created_at\)<=now\(\)/);
+assert.match(migration,/pg_advisory_xact_lock\(hashtextextended\(lock_id::text,0\)\)/);
+assert.match(migration,/accepted_count<>array_length\(ids,1\)/);
+assert.doesNotMatch(server,/action==='create'.{0,180}vuppi_schedule_delivery/s);
+assert.match(service,/lastPendingAlertKey/);
+assert.match(service,/forcePendingAlert/);
+assert.match(delivery,/renderMerchantMapStable/);
+assert.doesNotMatch(delivery,/renderMerchantMap=async\(\)=>\{[^}]*renderMerchantMapV82\(\)/);
+assert.match(admin,/vuppi-courier-helmet-marker\.png\?v=84/);
+assert.match(css,/v84: tema operacional claro/);
+assert.match(css,/--admin-surface:#fff/);
+console.log('scheduling-pending-theme-v84.test.mjs passed');

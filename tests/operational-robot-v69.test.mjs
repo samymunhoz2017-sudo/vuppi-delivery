@@ -47,7 +47,7 @@ for(const invariant of ['id="accessGate"','id="courierHome"','id="merchantHome"'
 for(const invariant of ['memberAccess','renderAccessGate','Seu cadastro está em análise','courierLocationWatch=null','todayStart.setHours(0,0,0,0)','courier-motorcycle-3d.svg','courier-settings-hero'])assert.ok(delivery.includes(invariant),`interface sem ${invariant}`);
 assert.match(delivery,/catch\(error\)\{showLoginRequired/,'falha de login precisa liberar o formulário para nova tentativa');
 assert.match(worker,/email:data\.email\.trim\(\)\.toLowerCase\(\)/,'login precisa normalizar o e-mail');
-for(const invariant of ['courierMapIcon','courier-motorcycle-3d.svg','liveCourierMarkers'])assert.ok(admin.includes(invariant),`mapa administrativo sem ${invariant}`);
+for(const invariant of ['courierMapIcon','vuppi-courier-helmet-marker.png','liveCourierMarkers'])assert.ok(admin.includes(invariant),`mapa administrativo sem ${invariant}`);
 for(const invariant of ['hasOperationalAccess','showAccessGate','Verificar liberação','stopService(new Intent(this,CourierService.class))','api.get("/api/delivery/state")'])assert.ok(activity.includes(invariant),`Android sem ${invariant}`);
 assert.match(server,/courierActions/);
 assert.match(server,/status!==\'active\'/);

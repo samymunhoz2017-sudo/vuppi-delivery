@@ -222,7 +222,10 @@ export async function handleDelivery(request,c){
   const result=action==='create'
    ?await c.upstream('/rest/v1/rpc/vuppi_create_delivery_transaction',{method:'POST',token:s.access,body:{p_data:data},carErrors:true})
    :await rpc(action,data||{});
-  if(action==='create'&&data?.quote_id){if(data.scheduled_for)await c.upstream('/rest/v1/rpc/vuppi_schedule_delivery',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_scheduled_for:data.scheduled_for,p_lead_minutes:Number(data.dispatch_lead_minutes||10)},carErrors:true});try{await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:{phone:data.phone,name:data.recipient,address:data.destination,complement:data.complement||'',label:'Principal'}},carErrors:true})}catch(error){console.warn('customer_save_failed',{message:error.message})}}
+  // Scheduling is persisted inside vuppi_create_delivery_transaction. Keeping it in
+  // the same database transaction prevents an order from becoming visible between
+  // creation and a second scheduling call (or remaining immediate if that call fails).
+  if(action==='create'&&data?.quote_id){try{await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:{phone:data.phone,name:data.recipient,address:data.destination,complement:data.complement||'',label:'Principal'}},carErrors:true})}catch(error){console.warn('customer_save_failed',{message:error.message})}}
   return reply(result);
  }
  if(path==='/api/delivery/quote'&&request.method==='POST'){
