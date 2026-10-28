@@ -202,6 +202,9 @@ export async function handleDelivery(request,c){
    if(!saved.ok){let problem={};try{problem=await saved.json()}catch{}return c.json({message:problem.message||'Não foi possível salvar o cadastro operacional.'},400)}
    return reply({ok:true,user_id:userId,profile:(await saved.json().catch(()=>[]))[0]||payload});
   }
+  if(action==='register'&&data.kind==='courier'){
+   const phone=String(data.phone||'').replace(/\D/g,''),address=String(data.address||'').trim(),name=String(data.name||'').trim();if(phone.length<10||phone.length>11||name.length<2||address.length<5||!/(?:^|\D)\d{1,6}(?:\D|$)/.test(address))return c.json({message:'Informe nome, telefone com DDD e endereço com número.'},400);data={...data,name,phone,address};
+  }
   if(action==='register'&&data.kind==='courier'&&data.address&&(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng)))){
    try{data={...data,...await geocode(data.address)}}catch{data={...data,lat:null,lng:null}}
   }else if(['register','admin_register'].includes(action)&&data.address&&(!Number.isFinite(Number(data.lat))||!Number.isFinite(Number(data.lng)))){

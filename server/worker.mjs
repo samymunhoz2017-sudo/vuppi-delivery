@@ -2,8 +2,9 @@ import assets from './assets.mjs';
 import {handleCarros,runCarDispatch} from './carros.mjs';
 import {handleDelivery} from './delivery.mjs';
 import {handleFinancial,handleMercadoPagoWebhook,handleMercadoPagoPayoutWebhook,paymentProvider,runFinanceBilling} from './financial.mjs';
-const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.84.0',ANDROID_VERSION='0.84.0';
+const COOKIE='__Host-up_session',MAX_SESSION=8*60*60,REMEMBER_SESSION=30*24*60*60,WEB_VERSION='0.85.0',ANDROID_VERSION='0.85.0';
 const encoder=new TextEncoder(),refreshed=new Map();
+const addressLookupWindows=new Map();
 class AppError extends Error{constructor(message,status=400,clear=false){super(message);this.status=status;this.clear=clear}}
 const secureHeaders={
   'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer',
@@ -47,6 +48,13 @@ export function createWorker(assetMap=assets,fetcher=(...args)=>fetch(...args)){
    }
    const options=config(env);
    if(url.pathname==='/api/auth/status'&&request.method==='GET')return json({ready:!!options});
+   if(url.pathname==='/api/courier/address'&&request.method==='GET'){
+    const query=String(url.searchParams.get('q')||'').trim().slice(0,160);if(query.length<3)return json({results:[]});
+    const now=Date.now(),ip=request.headers.get('cf-connecting-ip')||request.headers.get('x-real-ip')||'shared',window=addressLookupWindows.get(ip)||{start:now,count:0};if(now-window.start>60000){window.start=now;window.count=0}if(++window.count>40)return json({message:'Muitas buscas. Aguarde um momento.'},429);addressLookupWindows.set(ip,window);if(addressLookupWindows.size>1000)addressLookupWindows.delete(addressLookupWindows.keys().next().value);
+    if(!env.GOOGLE_MAPS_SERVER_KEY)return json({message:'Busca de endereços indisponível. Preencha o endereço manualmente.'},503);
+    const mapsUrl=new URL('https://maps.googleapis.com/maps/api/geocode/json');mapsUrl.searchParams.set('region','br');mapsUrl.searchParams.set('language','pt-BR');mapsUrl.searchParams.set('address',query+', Pitangueiras, SP, Brasil');mapsUrl.searchParams.set('key',env.GOOGLE_MAPS_SERVER_KEY);
+    try{const response=await fetcher(mapsUrl.toString(),{signal:AbortSignal.timeout(8000)}),body=await response.json();if(!response.ok||!['OK','ZERO_RESULTS'].includes(body.status))return json({message:'Busca indisponível. Preencha o endereço manualmente.'},503);return json({results:(body.results||[]).slice(0,5).map(row=>({label:String(row.formatted_address||'')})).filter(row=>row.label)})}catch{return json({message:'Busca indisponível. Preencha o endereço manualmente.'},503)}
+   }
    if(url.pathname==='/api/maps/config'&&request.method==='GET')return json({provider:'google',ready:!!env.GOOGLE_MAPS_BROWSER_KEY,browserKey:env.GOOGLE_MAPS_BROWSER_KEY||''});
    if(!options)throw new AppError('A configuração segura do servidor está pendente.',503);
    async function upstream(path,{method='GET',body,token,carErrors=false}={}){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);try{const res=await fetcher(options.url+path,{method,headers:{apikey:options.key,...(body?{'Content-Type':'application/json'}:{}),...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:controller.signal});let data;try{data=await res.json()}catch{}if(!res.ok){const safeDomainMessage=carErrors&&typeof data?.message==='string'&&(data.message.startsWith('UP_CAR:')||data.message.startsWith('VUPPI_FINANCE:'));const message=safeDomainMessage?data.message.replace(/^(UP_CAR:|VUPPI_FINANCE:)\s*/, '').slice(0,250):carErrors&&data?.code==='23505'?'Operação duplicada ou corrida já atribuída. Atualize o atendimento.':apiMessage(data,res.status);throw new AppError(message,res.status===429?429:res.status===401?401:res.status>=500?502:400)}return data}catch(e){if(e instanceof AppError)throw e;throw new AppError('Não foi possível conectar ao serviço de autenticação.',502)}finally{clearTimeout(timer)}}

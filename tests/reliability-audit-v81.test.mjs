@@ -11,7 +11,7 @@ assert.doesNotMatch(admin,/(?<!\.)\bprompt\s*\(/,'o painel não pode usar prompt
 assert.doesNotMatch(delivery,/(?<!\.)\bprompt\s*\(/,'os portais não podem usar prompt(), incompatível com o contêiner Android');
 assert.doesNotMatch(quick,/(?<!\.)\balert\s*\(/,'ações rápidas devem usar o sistema visual de mensagens');
 assert.match(admin,/Mercado Pago conectado/,'a saúde financeira deve identificar o gateway real');
-assert.match(delivery,/APP_VERSION='0\.84\.0'/);
+assert.match(delivery,/APP_VERSION='0\.85\.0'/);
 assert.match(admin,/function adminAsk\(/);
 assert.match(delivery,/function portalAskReason\(/);
 console.log('reliability-audit-v81.test.mjs passed');

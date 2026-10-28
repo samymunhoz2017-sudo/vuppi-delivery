@@ -32,3 +32,4 @@ await import('./reliability-audit-v81.test.mjs');
 await import('./active-route-live-map-v82.test.mjs');
 await import('./merchant-experience-v83.test.mjs');
 await import('./scheduling-pending-theme-v84.test.mjs');
+await import('./courier-address-lookup.test.mjs');
