@@ -183,9 +183,9 @@ export async function handleDelivery(request,c){
      if(data.max_delivery_stops!=null)payload.max_delivery_stops=Math.max(1,Math.min(30,Number(data.max_delivery_stops)||10));
      if(data.cash_platform_fee_bps!=null&&data.cash_platform_fee_bps!==''){const fee=Number(data.cash_platform_fee_bps);if(!Number.isInteger(fee)||fee<0||fee>10000)return c.json({message:'Taxa de dinheiro inválida.'},400);payload.cash_platform_fee_bps=fee}else payload.cash_platform_fee_bps=null;
     }
-    const updated=await c.fetcher(c.env.SUPABASE_URL+'/rest/v1/vuppi_members?user_id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
+    const updated=await c.fetcher(c.env.SUPABASE_URL+'/rest/v1/vuppi_members?user_id=eq.'+encodeURIComponent(id)+'&kind=eq.'+encodeURIComponent(kind),{method:'PATCH',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
     if(!updated.ok){let problem={};try{problem=await updated.json()}catch{}return c.json({message:problem.message||'Não foi possível atualizar o cadastro.'},400)}
-    return reply({ok:true,user_id:id,profile:(await updated.json().catch(()=>[]))[0]||payload});
+    const rows=await updated.json().catch(()=>[]);if(!Array.isArray(rows)||!rows.length)return c.json({message:'Cadastro operacional não encontrado. Atualize a lista e conclua o cadastro antes de editar.'},404);return reply({ok:true,user_id:id,profile:rows[0]});
    }
    let userId=id;
    if(action==='admin_courier_register'&&!userId){
@@ -198,7 +198,7 @@ export async function handleDelivery(request,c){
    }
    if(!/^[0-9a-f-]{36}$/i.test(userId||''))return c.json({message:'Conta do entregador inválida.'},400);
    const payload={user_id:userId,kind,name,phone,city,address,approved:false,member_status:'pending',is_available:false};
-   const endpoint=c.env.SUPABASE_URL+'/rest/v1/vuppi_members?on_conflict=user_id',saved=await c.fetcher(endpoint,{method:'POST',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation,resolution=merge-duplicates'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
+   const endpoint=c.env.SUPABASE_URL+'/rest/v1/vuppi_members',saved=await c.fetcher(endpoint,{method:'POST',headers:{apikey:c.env.SUPABASE_SECRET_KEY,Authorization:'Bearer '+c.env.SUPABASE_SECRET_KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(10000)});
    if(!saved.ok){let problem={};try{problem=await saved.json()}catch{}return c.json({message:problem.message||'Não foi possível salvar o cadastro operacional.'},400)}
    return reply({ok:true,user_id:userId,profile:(await saved.json().catch(()=>[]))[0]||payload});
   }
