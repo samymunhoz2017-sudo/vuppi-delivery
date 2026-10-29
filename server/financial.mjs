@@ -127,9 +127,19 @@ export async function handleFinancial(request,c){
   return reply({state,entries:Array.isArray(entries)?entries:[]});
  }
  if(path==='/api/finance/action'&&request.method==='POST'){
-  const input=await c.readJson(request),action=String(input.action||''),data=input.data||{};
+  const input=await c.readJson(request,750000),action=String(input.action||''),data=input.data||{};
   const billingActions=['billing_profile_create','billing_run_preview','billing_run_execute','billing_exemption_create','billing_exemption_revoke','billing_exemption_mass_preview','billing_exemption_mass_apply','billing_withdrawal_approve','billing_settings_save'];
-  if(!['topup_quote','topup_request','withdraw_request','withdrawal_review','withdrawal_reject','admin_adjust','admin_confirm_topup','admin_process_withdrawal','settings_save','benefit_create','reconcile',...billingActions].includes(action))return c.json({message:'Ação financeira inválida.'},400);
+  if(!['topup_quote','topup_request','withdraw_request','withdrawal_review','withdrawal_reject','admin_adjust','admin_confirm_topup','admin_process_withdrawal','withdrawal_manual_detail','withdrawal_manual_record','withdrawal_manual_receipt','withdrawal_manual_release','settings_save','benefit_create','reconcile',...billingActions].includes(action))return c.json({message:'Ação financeira inválida.'},400);
+  if(action==='withdrawal_manual_detail'||action==='withdrawal_manual_receipt')return reply(await c.upstream('/rest/v1/rpc/vuppi_manual_withdrawal_'+(action==='withdrawal_manual_detail'?'detail':'receipt'),{method:'POST',token:s.access,body:{p_id:data.id},carErrors:true}));
+  if(action==='withdrawal_manual_release')return reply(await c.upstream('/rest/v1/rpc/vuppi_manual_withdrawal_release',{method:'POST',token:s.access,body:{p_id:data.id,p_reason:data.reason},carErrors:true}));
+  if(action==='withdrawal_manual_record'){
+   const mime=String(data.mime_type||''),encoded=String(data.content_base64||''),reference=String(data.reference||'').trim();
+   if(!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)||encoded.length>700000||reference.length<5||reference.length>150)throw Error('Comprovante ou referência inválidos.');
+   let bytes;try{bytes=atob(encoded.slice(0,32))}catch{throw Error('Comprovante inválido.')}
+   const isPdf=bytes.startsWith('%PDF-'),isPng=bytes.startsWith('\x89PNG\r\n\x1a\n'),isJpeg=bytes.startsWith('\xff\xd8\xff');
+   if(!((mime==='application/pdf'&&isPdf)||(mime==='image/png'&&isPng)||(mime==='image/jpeg'&&isJpeg)))throw Error('Use um comprovante PDF, PNG ou JPG válido.');
+   return reply(await c.upstream('/rest/v1/rpc/vuppi_manual_withdrawal_record',{method:'POST',token:s.access,body:{p_id:data.id,p_reference:reference,p_mime:mime,p_content:encoded},carErrors:true}));
+  }
   if(action==='admin_adjust')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_wallet_adjust',{method:'POST',token:s.access,body:{p_wallet:data.wallet_id,p_direction:data.direction,p_amount_cents:Number(data.amount_cents),p_reason:data.reason,p_idempotency_key:data.idempotency_key},carErrors:true}));
   if(action==='settings_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_finance_settings_admin',{method:'POST',token:s.access,body:{p_data:data},carErrors:true}));
   if(action==='withdraw_request')await c.upstream('/rest/v1/rpc/vuppi_withdrawal_clear_stale',{method:'POST',token:s.access,body:{},carErrors:false});

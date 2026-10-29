@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {handleFinancial} from '../server/financial.mjs';
+let calls=[];
+const c={session:async()=>({s:{access:'token-teste'},user:{id:'courier'}}),readJson:r=>r.json(),json:(v,status=200)=>Response.json(v,{status}),renewCookie:async()=>{},upstream:async(path,options)=>{calls.push({path,options});return {ok:true}}};
+const request=(action,data)=>new Request('https://vuppidelivery.test/api/finance/action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,data})});
+await handleFinancial(request('withdrawal_manual_detail',{id:'example'}),c);assert.match(calls.at(-1).path,/vuppi_manual_withdrawal_detail/);assert.equal(calls.at(-1).options.token,'token-teste');
+await assert.rejects(()=>handleFinancial(request('withdrawal_manual_record',{id:'example',reference:'ref-12345',mime_type:'image/png',content_base64:btoa('malicious document')}),c),/válido/);
+const png=Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82]).toString('base64');
+await handleFinancial(request('withdrawal_manual_record',{id:'example',reference:'ref-12345',mime_type:'image/png',content_base64:png}),c);assert.match(calls.at(-1).path,/vuppi_manual_withdrawal_record/);assert.equal(calls.at(-1).options.body.p_mime,'image/png');
+await handleFinancial(request('withdrawal_manual_receipt',{id:'example'}),c);assert.match(calls.at(-1).path,/vuppi_manual_withdrawal_receipt/);
+console.log('Saque manual: autenticação encaminhada, comprovante validado e RPCs corretas.');
