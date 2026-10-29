@@ -141,7 +141,6 @@ export async function handleDelivery(request,c){
   if(action==='customer_save')return reply(await c.upstream('/rest/v1/rpc/vuppi_merchant_customer',{method:'POST',token:s.access,body:{p_action:'save',p_data:data||{}},carErrors:true}));
   if(action==='admin_create'){
    const result=await c.upstream('/rest/v1/rpc/vuppi_create_delivery_transaction',{method:'POST',token:s.access,body:{p_data:data},carErrors:true});
-   if(data.scheduled_for)await c.upstream('/rest/v1/rpc/vuppi_schedule_delivery',{method:'POST',token:s.access,body:{p_quote:data.quote_id,p_scheduled_for:data.scheduled_for,p_lead_minutes:Number(data.dispatch_lead_minutes||10)},carErrors:true});
    return reply(result);
   }
   if(action==='admin_manage')return reply(await c.upstream('/rest/v1/rpc/vuppi_admin_manage_delivery',{method:'POST',token:s.access,body:{p_action:data.operation,p_delivery:data.id,p_data:data},carErrors:true}));
