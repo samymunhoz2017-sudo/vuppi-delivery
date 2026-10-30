@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {calculateGroupedSettlement} from '../server/grouped-settlement.mjs';
+const item=(id,price,required=false,fee=0)=>({id,frozen_price_cents:price,return_required:required,frozen_return_cents:fee});
+assert.deepEqual(calculateGroupedSettlement([item('a',700),item('b',800),item('c',900)]),{delivery_subtotal_cents:2400,requires_return:false,return_fee_cents:0,gross_cents:2400,delivery_count:3});
+assert.equal(calculateGroupedSettlement([item('a',1000,true,300),item('b',800),item('c',900)]).gross_cents,2700);
+assert.equal(calculateGroupedSettlement([item('a',1000,true,300),item('b',1100,true,300),item('c',1200,true,300)]).gross_cents,2700);
+assert.throws(()=>calculateGroupedSettlement([item('a',1000,true,300),item('b',1100,true,400)]),/diferentes/);
+assert.throws(()=>calculateGroupedSettlement([{id:'a',frozen_price_cents:1000,return_required:true}]),/Snapshot/);
+assert.throws(()=>calculateGroupedSettlement([item('a',100),item('a',100)]),/duplicados/);
+assert.throws(()=>calculateGroupedSettlement(Array.from({length:25},(_,i)=>item(String(i),100))),/24/);
+console.log('Cálculo agrupado: snapshots, limite e taxa única verificados; integração financeira ainda pendente.');

@@ -35,3 +35,5 @@ await import('./scheduling-pending-theme-v84.test.mjs');
 await import('./courier-address-lookup.test.mjs');
 
 await import('./manual-withdrawal.test.mjs');
+await import('./grouped-settlement.test.mjs');
+await import('./grouped-stops.test.mjs');

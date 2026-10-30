@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {routeProgress,confirmRouteStop} from '../server/grouped-stops.mjs';
+const stops=[{id:'a',sequence:1,status:'active'},{id:'b',sequence:2,status:'pending'},{id:'c',sequence:3,status:'pending'}];
+assert.deepEqual(routeProgress(stops,true),{next_stop_id:'a',phase:'delivering',confirmed_count:0,return_available:false});
+assert.throws(()=>confirmRouteStop(stops,true,'b'),/fora da ordem/);
+let first=confirmRouteStop(stops,true,'a');assert.equal(first.next_stop_id,'b');assert.equal(first.return_available,false);assert.equal(stops[0].status,'active');
+assert.equal(confirmRouteStop(first.stops,true,'a').already_confirmed,true);
+let second=confirmRouteStop(first.stops,true,'b');assert.equal(second.next_stop_id,'c');assert.equal(second.return_available,false);
+let third=confirmRouteStop(second.stops,true,'c');assert.equal(third.phase,'returning');assert.equal(third.return_available,true);
+assert.equal(routeProgress(third.stops,false).phase,'ready_to_settle');
+assert.throws(()=>routeProgress([{id:'a',sequence:1,status:'pending'},{id:'b',sequence:2,status:'confirmed'}],true),/fora da ordem/);
+assert.throws(()=>routeProgress([{id:'a',sequence:1,status:'pending'},{id:'b',sequence:1,status:'pending'}],true),/duplicada/);
+assert.equal(routeProgress([{id:'a',sequence:1,status:'failed'}],true).phase,'attention');
+console.log('Modelo local de paradas: ordem, repetição e retorno após a última parada verificados.');
