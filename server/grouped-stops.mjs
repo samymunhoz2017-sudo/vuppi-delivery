@@ -27,7 +27,9 @@ export function confirmRouteStop(stops,requiresReturn,stopId){
  const progress=routeProgress(stops,requiresReturn),stop=stops.find(item=>item.id===stopId);
  if(!stop)throw Error('Parada não encontrada.');
  if(stop.status==='confirmed')return {already_confirmed:true,stops:stops.map(x=>({...x})),...progress};
- if(progress.next_stop_id!==stopId||stop.status==='failed'||stop.status==='cancelled')throw Error('A parada não está disponível ou está fora da ordem.');
+ if(progress.next_stop_id!==stopId||!['active','arrived'].includes(stop.status))throw Error('A parada não está disponível ou está fora da ordem.');
  const nextStops=stops.map(x=>({...x,status:x.id===stopId?'confirmed':x.status}));
+ const afterConfirmation=routeProgress(nextStops,requiresReturn);
+ if(afterConfirmation.next_stop_id){const next=nextStops.find(x=>x.id===afterConfirmation.next_stop_id);if(next.status==='pending')next.status='active';}
  return {already_confirmed:false,stops:nextStops,...routeProgress(nextStops,requiresReturn)};
 }
