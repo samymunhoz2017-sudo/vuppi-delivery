@@ -105,6 +105,7 @@ export async function handleDelivery(request,c){
   if(action==='assign')return reply(await c.upstream('/rest/v1/rpc/vuppi_assign_delivery',{method:'POST',token:s.access,body:{p_delivery:data.id,p_courier:data.courier},carErrors:true}));
   if(action==='pending_resend')return reply(await c.upstream('/rest/v1/rpc/vuppi_pending_admin',{method:'POST',token:s.access,body:{p_action:'resend',p_data:{id:data.id,reason:data.reason||'Reenvio manual pela central'}},carErrors:true}));
   if(action==='arrive_pickup')return reply(await c.upstream('/rest/v1/rpc/vuppi_delivery_pickup_arrive',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
+  if(action==='collect')return reply(await c.upstream('/rest/v1/rpc/vuppi_collect_group_at_pickup',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='return_start')return reply(await c.upstream('/rest/v1/rpc/vuppi_start_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action==='return_finalize')return reply(await c.upstream('/rest/v1/rpc/vuppi_finalize_delivery_return',{method:'POST',token:s.access,body:{p_delivery:data.id},carErrors:true}));
   if(action.startsWith('message_')){

@@ -10,6 +10,7 @@ const get=path=>new Request('https://example.test/api/delivery/'+path);
 let res=await handleDelivery(req('action',{action:'grant_superadmin',data:{}}),context);assert.equal(res.status,400);
 await handleDelivery(req('action',{action:'accept',data:{id:'order'}}),context);assert.equal(calls.at(-1).options.token,'user-token');
 assert.match(calls.at(-1).path,/vuppi_accept_delivery_offer/);assert.equal(calls.at(-1).options.body.p_delivery,'order');
+await handleDelivery(req('action',{action:'collect',data:{id:'order'}}),context);assert.match(calls.at(-1).path,/vuppi_collect_group_at_pickup/);assert.equal(calls.at(-1).options.body.p_delivery,'order');
 await handleDelivery(req('action',{action:'reject',data:{id:'order'}}),context);assert.match(calls.at(-1).path,/vuppi_reject_delivery_offer/);assert.equal(calls.at(-1).options.body.p_delivery,'order');
 await handleDelivery(req('action',{action:'availability',data:{available:true}}),context);assert.equal(calls.at(-1).options.body.p_action,'availability');
 await handleDelivery(req('action',{action:'admin_register',data:{email:'partner@example.test',free_period_days:30}}),context);assert.ok(calls.some(x=>x.options?.body?.p_action==='admin_register'));assert.equal(calls.at(-1).options.body.p_action,'profile_create');assert.equal(calls.at(-1).options.body.p_data.free_period_days,30);
