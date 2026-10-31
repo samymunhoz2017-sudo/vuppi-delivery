@@ -20,9 +20,9 @@ const app=createWorker(assets,upstream);
 const req=(path,{method='GET',body,cookie,originHeader=origin,headers={}}={})=>new Request(origin+path,{method,headers:{...(method==='POST'?{Origin:originHeader,'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{}),...headers},...(body?{body:typeof body==='string'?body:JSON.stringify(body)}:{})});
 const send=(path,options)=>app.fetch(req(path,options),env);
 let response=await send('/api/auth/status');assert.deepEqual(await response.json(),{ready:true});
-response=await send('/api/app/version?platform=android');assert.equal(response.status,200);const appVersion=await response.json();assert.equal(appVersion.latest_version,'0.88.0');assert.equal(appVersion.minimum_supported_version,'0.55.0');assert.equal(appVersion.active,true);assert.equal(appVersion.store_url,'/downloads/vuppi-entregador.apk');
-response=await app.fetch(req('/api/app/version?platform=android'),{...env,UP_ANDROID_LATEST_VERSION:'0.64.0'});assert.equal((await response.json()).latest_version,'0.88.0');
-response=await send('/downloads/vuppi-entregador.apk');assert.match(response.headers.get('Content-Disposition'),/Vuppi-Entregador-0\.88\.0\.apk/);
+response=await send('/api/app/version?platform=android');assert.equal(response.status,200);const appVersion=await response.json();assert.equal(appVersion.latest_version,'0.89.0');assert.equal(appVersion.minimum_supported_version,'0.55.0');assert.equal(appVersion.active,true);assert.equal(appVersion.store_url,'/downloads/vuppi-entregador.apk');
+response=await app.fetch(req('/api/app/version?platform=android'),{...env,UP_ANDROID_LATEST_VERSION:'0.64.0'});assert.equal((await response.json()).latest_version,'0.89.0');
+response=await send('/downloads/vuppi-entregador.apk');assert.match(response.headers.get('Content-Disposition'),/Vuppi-Entregador-0\.89\.0\.apk/);
 response=await app.fetch(req('/api/auth/status'),{});assert.deepEqual(await response.json(),{ready:false});
 response=await send('/api/auth/session');assert.equal(response.status,401);
 response=await send('/api/auth/login',{method:'POST',body:{email:'teste@exemplo.com',password:'teste'},originHeader:'https://outro.example'});assert.equal(response.status,403);assert.equal(calls.length,0);
@@ -47,3 +47,4 @@ for(const path of Object.keys(assets)){response=await send(path);const content=a
 response=await send('/.env');assert.equal(response.status,404);response=await send('/server/worker.mjs');assert.equal(response.status,404);
 const client=readFileSync(new URL('../dist/auth-client.js',import.meta.url),'utf8');assert.ok(!/sessionStorage|localStorage|refresh_token|access_token|apikey/.test(client));
 console.log('Aprovado: chave fora dos arquivos pÃºblicos; cookie criptografado; HTTPS; CSRF; cookie adulterado; separaÃ§Ã£o por origem; limites de corpo; permissÃµes por usuÃ¡rio/cidade; cadastro sem confirmaÃ§Ã£o; renovaÃ§Ã£o; saÃ­da; CSP e bloqueio de arquivos privados.');
+
