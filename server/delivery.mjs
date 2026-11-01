@@ -41,6 +41,11 @@ export async function handleDelivery(request,c){
   const messages=(rows||[]).filter(eligible).map(row=>({...row,read_at:readMap.get(row.id)||null}));
   return reply({messages,unread:isAdmin?0:messages.filter(x=>!x.read_at).length,admin:isAdmin});
  }
+ if(path==='/api/delivery/history'&&request.method==='GET'){
+  const date=new URL(request.url).searchParams.get('date')||'';if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return c.json({message:'Informe uma data válida.'},400);
+  const rows=await c.upstream('/rest/v1/rpc/vuppi_courier_day_history',{method:'POST',token:s.access,body:{p_date:date},carErrors:true});
+  return reply({orders:Array.isArray(rows)?rows:[]});
+ }
  if(path==='/api/delivery/state'&&request.method==='GET'){
   await maintainPending();
   const state=await c.upstream('/rest/v1/rpc/vuppi_delivery_state',{method:'POST',token:s.access,body:{},carErrors:true});

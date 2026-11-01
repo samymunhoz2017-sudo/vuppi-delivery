@@ -20,7 +20,7 @@ assert.match(android,/if\(completedOrder==null\)completedOrder=snapshot/);
 assert.match(android,/pendingState/);
 assert.match(android,/Ofertas atuais e decisões registradas nas últimas 24 horas/);
 assert.match(android,/api\.get\("\/api\/finance\/summary\?limit=30"\)/);
-assert.match(android,/Cada OS concluída gera um único lançamento auditável/);
+assert.match(android,/showEarningsReceipt/);
 assert.match(android,/Quero ser entregador/);
 assert.match(android,/courierSignupDialog\(\)/);
 assert.match(android,/api\.signup\(/);
@@ -39,3 +39,4 @@ assert.match(adminApp,/setInterval\(async\(\)=>\{if\(tab!=='driverMap'\)/);
 assert.match(adminApp,/Ofertas e pendências/);
 assert.ok(!migration.match(/drop\s+(table|schema)|truncate|delete\s+from/i),'migration v60 não pode apagar dados');
 console.log('V60: clientes isolados, pendências, reoferta, resumo financeiro e recibo Android verificadas.');
+

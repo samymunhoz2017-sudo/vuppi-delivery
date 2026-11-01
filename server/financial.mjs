@@ -121,6 +121,10 @@ export async function handleFinancial(request,c){
   try{state.billing=await billingRpc('state',{city:url.searchParams.get('city')||''});state.billing.ready=true}catch(error){state.billing={ready:false,message:error.message}}return reply(state);
  }
  if(path==='/api/finance/statement'&&request.method==='GET')return reply(await rpc('statement',{wallet_id:url.searchParams.get('wallet_id'),limit:Math.min(200,Math.max(1,Number(url.searchParams.get('limit')||50)))}));
+ if(path==='/api/finance/courier-statement'&&request.method==='GET'){
+  const period=url.searchParams.get('period')||'today';if(!['today','yesterday','7days','30days'].includes(period))return c.json({message:'Período inválido.'},400);
+  const entries=await c.upstream('/rest/v1/rpc/vuppi_courier_statement_period',{method:'POST',token:s.access,body:{p_period:period},carErrors:true});return reply({entries:Array.isArray(entries)?entries:[]});
+ }
  if(path==='/api/finance/summary'&&request.method==='GET'){
   const state=await rpc('state'),wallet=state?.wallet;
   const entries=wallet?.id?await rpc('statement',{wallet_id:wallet.id,limit:Math.min(100,Math.max(1,Number(url.searchParams.get('limit')||50)))}):[];

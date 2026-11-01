@@ -31,14 +31,14 @@ assert.match(activity,/setMinUpdateIntervalMillis\(700\)/);
 assert.match(activity,/onRequestPermissionsResult/);
 assert.match(activity,/checkSelfPermission\(Manifest\.permission\.ACCESS_FINE_LOCATION\)!=PackageManager\.PERMISSION_GRANTED\)return/);
 assert.match(activity,/BuildConfig\.VERSION_NAME/);
-assert.match(activity,/Solicitar saque via Pix/);
+assert.match(activity,/Sacar via Pix/);
 assert.match(activity,/withdraw_request/);
 assert.match(activity,/getSharedPreferences\("vuppi\.update"/);
 assert.doesNotMatch(activity,/version=0\.62\.0/);
 assert.match(manifest,/android:hardwareAccelerated="true"/);
 assert.match(gradle,/VUPPI_MAPS_KEY is required for release builds/);
-assert.match(gradle,/versionCode 94/);
-assert.match(gradle,/versionName '0\.94\.0'/);
+assert.match(gradle,/versionCode 95/);
+assert.match(gradle,/versionName '0\.95\.0'/);
 assert.match(gradle,/buildConfig true/);
 assert.match(service,/OfferDecisionStore/);
 assert.match(service,/startForeground/);
@@ -49,4 +49,5 @@ assert.match(admin,/payload\.types\|\|\[\]/);
 assert.doesNotMatch(admin,/message\('Modalidade atualizada\.'\)/);
 
 console.log('Android nativo: banner ocioso, recibo idempotente com áudio, perfil funcional e tipos de entrega persistidos inspecionados.');
+
 
