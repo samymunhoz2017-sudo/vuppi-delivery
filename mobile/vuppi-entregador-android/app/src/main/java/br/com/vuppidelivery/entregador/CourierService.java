@@ -26,7 +26,7 @@ public class CourierService extends Service {
   private static volatile CourierService running;
   private volatile boolean active,available,updatesStarted; private volatile Location lastLocation; private volatile long nextRejectFlushAt,nextMessagePollAt;
   private WindowManager windows; private View floatingIcon,offerOverlay; private TextView badge; private String overlayOfferId="",lastPendingAlertKey="";
-  private MediaPlayer offerPlayer; private int offerPlays; private AudioManager audioManager; private AudioFocusRequest audioFocusRequest;
+  private MediaPlayer offerPlayer; private AudioManager audioManager; private AudioFocusRequest audioFocusRequest;
   private OfferStateMachine offerState; private OfferDecisionStore decisions;
   private final Runnable offerPoll=new Runnable(){@Override public void run(){new Thread(()->tick(lastLocation),"vuppi-offers").start();main.postDelayed(this,3000);}};
 
@@ -100,13 +100,13 @@ public class CourierService extends Service {
   private Notification trackingNotification(){PendingIntent pi=PendingIntent.getActivity(this,1,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);String title=active?"Entrega VUPPI em andamento":available?"VUPPI: você está livre":"VUPPI conectada à central",body=active?"Acompanhando sua rota em segundo plano.":available?"Buscando entregas na sua região.":"Você receberá comunicados da matriz neste aparelho.";return notificationBuilder(CHANNEL_TRACK).setSmallIcon(R.drawable.app_icon).setContentTitle(title).setContentText(body).setContentIntent(pi).setOngoing(true).build();}
   private void notifyOffer(JSONObject offer){Intent open=new Intent(this,MainActivity.class).putExtra("offerId",offer.optString("id")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);PendingIntent pi=PendingIntent.getActivity(this,2,open,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);Notification n=notificationBuilder(CHANNEL_OFFERS).setSmallIcon(R.drawable.app_icon).setContentTitle("Nova entrega disponível").setContentText("Abra a VUPPI para consultar e responder à oferta.").setPriority(Notification.PRIORITY_MAX).setCategory(Notification.CATEGORY_EVENT).setVisibility(Notification.VISIBILITY_PRIVATE).setAutoCancel(true).setContentIntent(pi).build();getSystemService(NotificationManager.class).notify(99,n);}
   private void playOfferAlert(){
-    stopOfferAlert();offerPlays=0;
+    stopOfferAlert();
     try{
       AudioAttributes attributes=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
       if(Build.VERSION.SDK_INT>=26){audioFocusRequest=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(attributes).setOnAudioFocusChangeListener(change->{if(change==AudioManager.AUDIOFOCUS_LOSS)stopOfferAlert();}).build();if(audioManager.requestAudioFocus(audioFocusRequest)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED)return;}
       offerPlayer=MediaPlayer.create(this,R.raw.vuppi_delivery,attributes,AudioManager.AUDIO_SESSION_ID_GENERATE);
       if(offerPlayer!=null){
-        offerPlayer.setOnCompletionListener(p->{offerPlays++;if(offerPlayer==p&&offerPlays<3){p.seekTo(0);p.start();}else stopOfferAlert();});
+        offerPlayer.setLooping(true);
         offerPlayer.start();
       }
     }catch(Exception ignored){stopOfferAlert();}

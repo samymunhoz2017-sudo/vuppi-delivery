@@ -17,7 +17,7 @@ assert.match(activity,/courierMarker\.setPosition\(here\)/);
 assert.match(activity,/private Button menuTile/);
 
 assert.match(delivery,/merchantHornContext/);
-assert.match(delivery,/\['requested','pending','unattended'\]\.includes\(old\)/);
+assert.match(delivery,/\['requested','pending','unattended','scheduled'\]\.includes\(old\)/);
 assert.match(delivery,/portal==='merchant'\?4000/);
 assert.match(delivery,/merchantPrefs\(\)\.sound/);
 assert.match(delivery,/addEventListener\('pointerdown',unlockMerchantAudio/);
